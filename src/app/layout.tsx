@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ClerkProvider, Show, UserButton } from "@clerk/nextjs";
-import Link from "next/link";
-import { currentUser } from "@clerk/nextjs/server";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
+import { ClerkProvider } from "@clerk/nextjs";
+import Header from "@/app/components/Header";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -22,49 +19,14 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const user = await currentUser();
-
-  const isAdmin = user?.publicMetadata?.role === "admin";
-
   return (
     <ClerkProvider>
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
-          <header className="flex justify-end items-center p-4 gap-4 h-16">
-            {isAdmin && (
-              <Show when="signed-in">
-                <Link href="/dashboard" className="font-semibold">
-                  Dashboard
-                </Link>
-              </Show>
-            )}
-
-            <Show when="signed-out">
-              <Link href={"/sign-in"}>Sign In</Link>
-              <Link href={"/sign-up"}>
-                <button className="bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
-                  Sign Up
-                </button>
-              </Link>
-            </Show>
-            <Show when="signed-in">
-              <div className=" flex justify-center items-center gap-3">
-              <span>
-                {user?.firstName}
-              </span>
-              <Avatar>
-                <AvatarImage src={user?.imageUrl} />
-                <AvatarFallback>{String(user?.firstName)[0]}</AvatarFallback>
-              </Avatar>
-              </div>
-            </Show>
-          </header>
+      <html lang="en">
+        <body>
+          <Header />
           {children}
-      </body>
-    </html>
-        </ClerkProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
