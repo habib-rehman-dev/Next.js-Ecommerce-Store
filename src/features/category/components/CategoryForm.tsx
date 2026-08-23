@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, ImageIcon, XIcon } from "lucide-react";
 
 import { createCategory } from "../actions/create-category";
 import { updateCategory } from "../actions/update-category";
@@ -40,7 +41,9 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Controlled states for shadcn Select components
+  // Controlled states for shadcn Select components (they don't participate
+  // in native form submission, so we read these directly rather than off
+  // the FormData object).
   const [parentCategory, setParentCategory] = useState<string>(
     category?.parentCategoryId ?? "none"
   );
@@ -48,27 +51,37 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
     category?.status ?? "active"
   );
 
+  // Image preview — shows the existing image in edit mode until the admin
+  // picks a replacement, or the newly-picked file's local preview.
+  const [imagePreview, setImagePreview] = useState<string | null>(category?.image ?? null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImagePreview(URL.createObjectURL(file));
+  }
+
+  function clearImage() {
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setImagePreview(mode === "edit" ? null : null);
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFieldErrors({});
     setFormError(null);
 
-    const form = new FormData(e.currentTarget);
-    const payload = {
-      name: String(form.get("name") ?? ""),
-      slug: String(form.get("slug") ?? ""),
-      description: String(form.get("description") ?? ""),
-      image: String(form.get("image") ?? ""),
-      parentCategoryId: parentCategory === "none" ? null : parentCategory,
-      status,
-      sortOrder: Number(form.get("sortOrder") ?? 0),
-    };
+    // Passed straight through to the Server Action as FormData (not a
+    // plain object) — that's what lets the picked File actually cross the
+    // client/server boundary along with the rest of the fields.
+    const formData = new FormData(e.currentTarget);
+    formData.set("parentCategoryId", parentCategory === "none" ? "" : parentCategory);
+    formData.set("status", status);
+    if (mode === "edit") formData.set("id", category!.id);
 
     startTransition(async () => {
-      const result =
-        mode === "create"
-          ? await createCategory(payload)
-          : await updateCategory({ id: category!.id, ...payload });
+      const result = mode === "create" ? await createCategory(formData) : await updateCategory(formData);
 
       if (!result.success) {
         setFormError(result.message);
@@ -144,15 +157,47 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Image URL Placeholder */}
+          {/* Image upload */}
           <div className="space-y-2">
-            <Label htmlFor="image">Image URL</Label>
-            <Input
-              id="image"
-              name="image"
-              defaultValue={category?.image}
-              placeholder="https://example.com/image.jpg"
-            />
+            <Label htmlFor="image">Image</Label>
+            <div className="flex items-start gap-4">
+              <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-muted/30">
+                {imagePreview ? (
+                  <Image
+                    src={imagePreview}
+                    alt=""
+                    fill
+                    className="object-cover"
+                    unoptimized={imagePreview.startsWith("blob:")}
+                  />
+                ) : (
+                  <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                )}
+              </div>
+              <div className="flex flex-1 flex-col gap-2">
+                <Input
+                  ref={fileInputRef}
+                  id="image"
+                  name="image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleImageChange}
+                />
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>JPEG, PNG, WEBP or GIF. Max 5MB.</span>
+                  {imagePreview && (
+                    <button
+                      type="button"
+                      onClick={clearImage}
+                      className="inline-flex items-center gap-1 text-destructive hover:underline"
+                    >
+                      <XIcon className="h-3 w-3" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
             {fieldErrors.image?.[0] && (
               <p className="text-xs text-destructive">{fieldErrors.image[0]}</p>
             )}
@@ -160,29 +205,30 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
 
           {/* Parent Category */}
           <div className="space-y-2">
-  <Label>Parent Category</Label>
-  <Select 
-    value={parentCategory} 
-    onValueChange={(val) => setParentCategory(val ?? "none")}
-  >
-    <SelectTrigger>
-      <SelectValue placeholder="Select parent category" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="none">None (Top-level category)</SelectItem>
-      {parentOptions
-        .filter((p) => p.id !== category?.id)
-        .map((p) => (
-          <SelectItem key={p.id} value={p.id}>
-            {p.name}
-          </SelectItem>
-        ))}
-    </SelectContent>
-  </Select>
-  {fieldErrors.parentCategoryId?.[0] && (
-    <p className="text-xs text-destructive">{fieldErrors.parentCategoryId[0]}</p>
-  )}
-</div>
+            <Label>Parent Category</Label>
+            <Select
+              value={parentCategory}
+              onValueChange={(val) => setParentCategory(val ?? "none")}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select parent category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None (Top-level category)</SelectItem>
+                {parentOptions
+                  .filter((p) => p.id !== category?.id)
+                  .map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {fieldErrors.parentCategoryId?.[0] && (
+              <p className="text-xs text-destructive">{fieldErrors.parentCategoryId[0]}</p>
+            )}
+          </div>
+
           {/* Status & Sort Order */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

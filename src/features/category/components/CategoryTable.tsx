@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import { ImageIcon } from "lucide-react";
 import type { CategoryDTO } from "../types";
 import { CategoryRowActions } from "./CategoryRowActions";
 
@@ -32,6 +34,7 @@ export function CategoryTable({ categories }: { categories: CategoryDTO[] }) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-14"></TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Slug</TableHead>
             <TableHead>Parent</TableHead>
@@ -43,6 +46,15 @@ export function CategoryTable({ categories }: { categories: CategoryDTO[] }) {
         <TableBody>
           {categories.map((c) => (
             <TableRow key={c.id}>
+              <TableCell>
+                <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
+                  {c.image ? (
+                    <Image src={c.image} alt="" fill className="object-cover" />
+                  ) : (
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+              </TableCell>
               <TableCell className="font-medium">{c.name}</TableCell>
               <TableCell className="text-muted-foreground font-mono text-xs">
                 {c.slug}

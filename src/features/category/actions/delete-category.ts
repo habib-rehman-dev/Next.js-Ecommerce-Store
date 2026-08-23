@@ -6,6 +6,7 @@ import { dbConnect } from "@/lib/db/dbConnect";
 import { Category } from "@/models/Category";
 import { Product } from "@/models/Product";
 import type { ActionResult } from "@/lib/action-result";
+import { deleteImageFromCloudinary } from "@/lib/cloudinary";
 
 export async function deleteCategory(id: string): Promise<ActionResult> {
   try {
@@ -41,6 +42,15 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   const deleted = await Category.findByIdAndDelete(id);
   if (!deleted) {
     return { success: false, message: "Category not found" };
+  }
+
+  // The DB row is already gone either way at this point, so a failed
+  // Cloudinary cleanup shouldn't block the user or surface as an error —
+  // just log it. (Nothing to roll back to: the delete already happened.)
+  if (deleted.imagePublicId) {
+    await deleteImageFromCloudinary(deleted.imagePublicId).catch((err) => {
+      console.error("Failed to delete category image from Cloudinary:", err);
+    });
   }
 
   revalidatePath("/admin/categories");

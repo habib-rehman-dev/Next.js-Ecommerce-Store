@@ -10,7 +10,6 @@ export const createCategorySchema = z.object({
     .optional()
     .or(z.literal("")),
   description: z.string().trim().max(500).optional().or(z.literal("")),
-  image: z.string().trim().url("Must be a valid URL").optional().or(z.literal("")),
   parentCategoryId: z.string().trim().nullable().optional(),
   status: z.enum(["active", "inactive"]).default("active"),
   sortOrder: z.coerce.number().int().min(0).default(0),
