@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { AppError } from "@/lib/AppError";
+import AppSidebar from "@/components/admin/AppSidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   try {
@@ -14,18 +15,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 border-r border-border bg-muted/30 p-4">
-        <nav className="flex flex-col gap-1 text-sm">
-          <Link href="/admin" className="rounded-md px-3 py-2 hover:bg-muted">Dashboard</Link>
-          <Link href="/admin/categories" className="rounded-md px-3 py-2 hover:bg-muted">Categories</Link>
-          <Link href="/admin/brands" className="rounded-md px-3 py-2 hover:bg-muted">Brands</Link>
-          <Link href="/admin/products" className="rounded-md px-3 py-2 hover:bg-muted">Products</Link>
-          <Link href="/admin/coupons" className="rounded-md px-3 py-2 hover:bg-muted">Coupons</Link>
-        </nav>
-      </aside>
-
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+    <SidebarProvider defaultOpen={true}>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex h-14 items-center gap-2 border-b px-4">
+          <SidebarTrigger />
+        </header>
+        <main className="flex-1 p-6">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
