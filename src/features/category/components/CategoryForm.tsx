@@ -160,27 +160,29 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
 
           {/* Parent Category */}
           <div className="space-y-2">
-            <Label>Parent Category</Label>
-            <Select value={parentCategory} onValueChange={setParentCategory}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select parent category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None (Top-level category)</SelectItem>
-                {parentOptions
-                  .filter((p) => p.id !== category?.id)
-                  .map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {fieldErrors.parentCategoryId?.[0] && (
-              <p className="text-xs text-destructive">{fieldErrors.parentCategoryId[0]}</p>
-            )}
-          </div>
-
+  <Label>Parent Category</Label>
+  <Select 
+    value={parentCategory} 
+    onValueChange={(val) => setParentCategory(val ?? "none")}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select parent category" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="none">None (Top-level category)</SelectItem>
+      {parentOptions
+        .filter((p) => p.id !== category?.id)
+        .map((p) => (
+          <SelectItem key={p.id} value={p.id}>
+            {p.name}
+          </SelectItem>
+        ))}
+    </SelectContent>
+  </Select>
+  {fieldErrors.parentCategoryId?.[0] && (
+    <p className="text-xs text-destructive">{fieldErrors.parentCategoryId[0]}</p>
+  )}
+</div>
           {/* Status & Sort Order */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
