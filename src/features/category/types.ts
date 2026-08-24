@@ -10,3 +10,4 @@ export type CategoryDTO = {
   createdAt: string;
   updatedAt: string;
 };
+
