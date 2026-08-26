@@ -10,6 +10,7 @@ cloudinary.config({
 });
 
 export type CloudinaryUploadResult = {
+  secure_url: string;
   url: string;
   publicId: string;
 };
@@ -36,7 +37,11 @@ export async function uploadImageToCloudinary(
           reject(error ?? new Error("Cloudinary upload failed with no result"));
           return;
         }
-        resolve({ url: result.secure_url, publicId: result.public_id });
+        resolve({
+          secure_url: result.secure_url,
+          url: result.secure_url,
+          publicId: result.public_id,
+        });
       },
     );
     uploadStream.end(buffer);
@@ -45,4 +50,23 @@ export async function uploadImageToCloudinary(
 
 export async function deleteImageFromCloudinary(publicId: string): Promise<void> {
   await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+}
+
+export function getPublicIdFromUrl(url: string): string | null {
+  try {
+    const regex = /\/v\d+\/(.+)\.[a-z]+$/i;
+    const match = url.match(regex);
+    if (match && match[1]) {
+      return match[1];
+    }
+    // Fallback split logic if version prefix isn't present
+    const parts = url.split("/");
+    const filenameWithExt = parts.pop();
+    const folder = parts.pop();
+    if (!filenameWithExt) return null;
+    const filename = filenameWithExt.split(".")[0];
+    return folder ? `${folder}/${filename}` : filename;
+  } catch {
+    return null;
+  }
 }

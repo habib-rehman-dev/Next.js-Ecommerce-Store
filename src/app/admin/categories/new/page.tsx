@@ -19,7 +19,7 @@ export default async function NewCategoryPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">New Category</h1>
           <p className="text-sm text-muted-foreground">
-            Add a new product category to your store catalog.
+            Add a new category to your store catalog.
           </p>
         </div>
       </div>

@@ -1,3 +1,4 @@
+'use server'
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { AppError } from "@/lib/AppError";

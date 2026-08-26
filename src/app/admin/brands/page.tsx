@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { getBrands } from "@/features/brand/actions/get-categories";
+import { getBrands } from "@/features/brand/queries/get-brands";
 import { Button } from "@/components/ui/button";
 import { BrandTable } from "@/features/brand/components/BrandsTable";
 

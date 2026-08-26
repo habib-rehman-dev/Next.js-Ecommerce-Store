@@ -2,7 +2,7 @@ import { Schema, model, models } from "mongoose";
 
 export interface ICoupon {
   code: string;
-  discountType: "percentage" | "fixed";
+  discountType: "percentage" 
   discountValue: number;
   minOrderValue?: number;
   maxUses?: number;
@@ -16,7 +16,7 @@ export interface ICoupon {
 const couponSchema = new Schema<ICoupon>(
   {
     code: { type: String, required: true, unique: true, uppercase: true, trim: true },
-    discountType: { type: String, enum: ["percentage", "fixed"], required: true },
+    discountType: { type: String, enum: ["percentage"], required: true },
     discountValue: { type: Number, required: true, min: 0 },
     minOrderValue: { type: Number, min: 0 },
     maxUses: { type: Number, min: 1 },

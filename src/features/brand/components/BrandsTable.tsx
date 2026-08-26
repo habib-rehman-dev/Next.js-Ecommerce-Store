@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ImageIcon } from "lucide-react";
 import type { IBrand } from "../types";
-// import { BrandRowActions } from "./BrandRowActions";
+import { BrandRowActions } from "./BrandRowActions";
 
 import {
   Table,
@@ -20,7 +20,7 @@ export function BrandTable({ brands }: { brands: IBrand[] }) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-12 text-center">
         <p className="text-sm text-muted-foreground">No brands found.</p>
-        <Button variant="link" asChild className="mt-2">
+        <Button variant="link"  className="mt-2">
           <Link href="/admin/brands/new">Create your first brand</Link>
         </Button>
       </div>
@@ -69,7 +69,7 @@ export function BrandTable({ brands }: { brands: IBrand[] }) {
               </TableCell>
 
               {/* Description */}
-              <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+              <TableCell className="text-muted-foreground max-w-50 truncate text-xs">
                 {brand.description || "—"}
               </TableCell>
 
@@ -88,7 +88,7 @@ export function BrandTable({ brands }: { brands: IBrand[] }) {
               {/* Actions */}
               <TableCell className="text-right">
                 {/* Place brand actions here */}
-                {/* <BrandRowActions id={brand.id} name={brand.name} /> */}
+                <BrandRowActions id={brand.id} name={brand.name} />
               </TableCell>
             </TableRow>
           ))}
