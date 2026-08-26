@@ -6,6 +6,9 @@ export interface IBrand {
   logo?: string;
   logoPublicId?: string;
   status: "active" | "inactive";
-  createdAt: Date;
-  updatedAt: Date;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export type BrandDTO = IBrand;

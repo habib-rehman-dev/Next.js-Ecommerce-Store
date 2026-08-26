@@ -21,7 +21,7 @@ const getCachedBrandById = unstable_cache(
       logo: brand.logo,
       logoPublicId: brand.logoPublicId,
       status: brand.status,
-      
+      sortOrder: brand.sortOrder ?? 0,
       createdAt: brand.createdAt.toISOString(),
       updatedAt: brand.updatedAt.toISOString(),
     };

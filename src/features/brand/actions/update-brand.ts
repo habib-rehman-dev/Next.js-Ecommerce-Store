@@ -126,8 +126,14 @@ export async function updateBrand(
     });
   }
 
+//   revalidatePath("/admin/brands");
+//   revalidateTag("brands");
+
+//   return { success: true, data: { id } };
+// }
+
   revalidatePath("/admin/brands");
-  revalidateTag("brands");
+  revalidateTag("brands", "max");
 
   return { success: true, data: { id } };
 }

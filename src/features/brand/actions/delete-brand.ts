@@ -43,7 +43,9 @@ export async function deleteBrand(id: string): Promise<ActionResult> {
     }
 
     revalidatePath("/admin/brands");
-    revalidateTag("brands");
+      revalidatePath("/admin/brands");
+    revalidateTag("brands", "max");
+    return { success: true, data: undefined };
     return { success: true, data: undefined };
   } catch (error) {
     console.error("Failed to delete brand:", error);
