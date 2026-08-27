@@ -3,7 +3,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Building2 } from "lucide-react";
 
 import type { BrandDTO } from "../types";
@@ -11,8 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -167,7 +164,7 @@ export function BrandStrip({
 
             {/* Empty state filler for smooth scrolling */}
             {brands.length > 6 && (
-              <div className="min-w-[1px] flex-shrink-0" aria-hidden="true" />
+              <div className="min-w-px shrink-0" aria-hidden="true" />
             )}
           </div>
 
@@ -206,7 +203,7 @@ function BrandCard({ brand }: { brand: BrandDTO }) {
   return (
     <Link
       href={`/products?brandId=${brand.id}`}
-      className="group flex-shrink-0 snap-start w-28 sm:w-36 md:w-40 lg:w-44"
+      className="group shrink-0 snap-start w-28 sm:w-36 md:w-40 lg:w-44"
     >
       <Card className="h-full border hover:border-primary/30 hover:shadow-md transition-all duration-300 bg-card/50 backdrop-blur-sm hover:bg-card">
         <CardContent className="p-4 flex flex-col items-center justify-center h-full gap-3">

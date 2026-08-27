@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Layers, Tag, Package, Ticket , Image } from "lucide-react";
+import { LayoutDashboard, Layers, Tag, Package, Ticket , Image, Mail } from "lucide-react";
 
 import {
   Sidebar,
@@ -24,6 +24,7 @@ const navItems = [
   { label: "Products", href: "/admin/products", icon: Package },
   { label: "Coupons", href: "/admin/coupons", icon: Ticket },
   { label: "Hero Banner", href: "/admin/hero-banners", icon: Image },
+  { label: "Subscribers", href: "/admin/subscribers", icon: Mail },
 ];
 
 export default function AppSidebar() {

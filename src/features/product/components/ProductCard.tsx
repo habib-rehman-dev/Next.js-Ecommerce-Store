@@ -74,7 +74,7 @@ export function ProductCard({
         href={`/products/${product.slug}`}
         className="group flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
       >
-        <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-md bg-muted">
+        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-muted">
           {primaryImage ? (
             <Image
               src={primaryImage}

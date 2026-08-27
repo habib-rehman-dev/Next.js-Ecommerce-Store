@@ -7,6 +7,8 @@ import { getActiveBrands } from "@/features/brand/queries/get-active-brands";
 import { BrandStrip } from "@/features/brand/components/BrandStrip";
 import { getFeaturedProducts } from "@/features/product/queries/get-featured-products";
 import { FeaturedProductsSection } from "@/features/product/components/FeaturedProductsSection";
+import { NewsletterSection } from "@/features/newsletter/components/NewsletterSection";
+import { TrustSignals } from "@/features/trust/components/TrustSignals";
 
 export default async function MarketingPage() {
   const [banners, categories, brands, featuredProducts, bestSellingProducts, newArrivals] =
@@ -26,10 +28,13 @@ export default async function MarketingPage() {
       {/* Hero Banner */}
       {primaryBanner && <HeroBannerSection banner={primaryBanner} />}
 
+      {/* Trust Signals - NEW */}
+      <TrustSignals variant="row" />
+
       {/* Category Grid */}
       <CategoryGridSection categories={categories} />
 
-      {/* Featured Products Section - New Addition */}
+      {/* Featured Products Section */}
       <FeaturedProductsSection
         featuredProducts={featuredProducts}
         bestSellingProducts={bestSellingProducts}
@@ -42,6 +47,9 @@ export default async function MarketingPage() {
         title="Trusted Brands"
         subtitle="Shop from industry-leading brands you know and love"
       />
+
+      {/* Newsletter Section - NEW */}
+      <NewsletterSection source="homepage" />
     </main>
   );
 }

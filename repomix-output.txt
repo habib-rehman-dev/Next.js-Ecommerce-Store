@@ -65,6 +65,13 @@ src/
     (marketing)/
       layout.tsx
       page.tsx
+    (shop)/
+      brands/
+        page.tsx
+      products/
+        featured/
+          page.tsx
+        page.tsx
     admin/
       brands/
         [id]/
@@ -98,6 +105,8 @@ src/
         page.tsx
         ProductsFilters.tsx
         ProductsPagination.tsx
+      subscribers/
+        page.tsx
       layout.tsx
       loading.tsx
       page.tsx
@@ -148,9 +157,13 @@ src/
         update-brand.ts
       components/
         BrandForm.tsx
+        BrandGrid.tsx
         BrandRowActions.tsx
+        BrandSearch.tsx
         BrandsTable.tsx
+        BrandStrip.tsx
       queries/
+        get-active-brands.ts
         get-brand-by-id.ts
         get-brands.ts
       types.ts
@@ -192,21 +205,35 @@ src/
         HeroBannerTable.tsx
       queries/
         get-hero-banners.ts
+    newsletter/
+      actions/
+        subscribe.ts
+      components/
+        NewsletterSection.tsx
+      validation.ts
     product/
       actions/
         create-product.ts
         delete-product.ts
+        toggle-featured.ts
         update-product.ts
         upload-images.ts
       components/
+        FeaturedProductsSection.tsx
+        ProductCard.tsx
         ProductForm.tsx
+        ProductQuickView.tsx
         ProductRowActions.tsx
         ProductsTable.tsx
       queries/
+        get-featured-products.ts
         get-product-by-id.ts
         get-products.ts
       types.ts
       validation.ts
+    trust/
+      components/
+        TrustSignals.tsx
   hooks/
     use-mobile.ts
   lib/
@@ -216,6 +243,7 @@ src/
     AppError.ts
     auth.ts
     cloudinary.ts
+    email.ts
     env.ts
     image-validation.ts
     slugify.ts
@@ -227,6 +255,7 @@ src/
     Category.ts
     Coupon.ts
     HeroBanner.ts
+    Newsletter.ts
     Order.ts
     Payment.ts
     Product.ts
@@ -249,6 +278,702 @@ tsconfig.json
 ================================================================
 Files
 ================================================================
+
+================
+File: src/app/admin/subscribers/page.tsx
+================
+import { getSubscribers, deleteSubscriberForm } from "@/features/newsletter/actions/subscribe";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Trash2, Mail, Check, X } from "lucide-react";
+import { requireAdmin } from "@/lib/auth";
+import type { INewsletter } from "@/models/Newsletter";
+
+type NewsletterSubscriber = INewsletter & { _id: string };
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminSubscribersPage() {
+  await requireAdmin();
+  const subscribers = await getSubscribers();
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Newsletter Subscribers</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage your email subscribers
+          </p>
+        </div>
+        <Badge variant="secondary" className="text-sm px-3 py-1">
+          {subscribers.length} subscribers
+        </Badge>
+      </div>
+
+      <div className="border rounded-lg overflow-hidden bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Email</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Subscribed</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {subscribers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <Mail className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  No subscribers yet
+                </TableCell>
+              </TableRow>
+            ) : (
+              subscribers.map((sub: NewsletterSubscriber) => (
+                <TableRow key={sub._id}>
+                  <TableCell className="font-medium">{sub.email}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="capitalize">
+                      {sub.source || "homepage"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {sub.isConfirmed ? (
+                      <Badge variant="default" className="bg-green-500/10 text-green-600 border-green-200">
+                        <Check className="h-3 w-3 mr-1" /> Confirmed
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        <X className="h-3 w-3 mr-1" /> Pending
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {new Date(sub.createdAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <form action={deleteSubscriberForm}>
+                      <input type="hidden" name="subscriberId" value={sub._id} />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </form>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+================
+File: src/features/newsletter/actions/subscribe.ts
+================
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Newsletter } from "@/models/Newsletter";
+import type { INewsletter } from "@/models/Newsletter";
+import { newsletterSchema, NewsletterInput } from "../validation";
+import { ActionResult } from "@/lib/action-result";
+import { requireAdmin } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/email";
+
+export async function subscribeToNewsletter(
+  data: NewsletterInput
+): Promise<ActionResult> {
+  try {
+    const validated = newsletterSchema.parse(data);
+    await dbConnect();
+
+    const existing = await Newsletter.findOne({ email: validated.email });
+    if (existing) {
+      return {
+        success: false,
+        message: "You're already subscribed!",
+        fieldErrors: { email: ["This email is already subscribed"] },
+      };
+    }
+
+    await Newsletter.create({
+      email: validated.email,
+      source: validated.source,
+      isConfirmed: true,
+    });
+
+    try {
+      await sendWelcomeEmail(validated.email);
+    } catch (error) {
+      console.error("Email sending failed:", error);
+    }
+
+    revalidatePath("/admin/subscribers");
+    revalidateTag("subscribers", "max");
+
+    return {
+      success: true,
+      message: "Thank you for subscribing! Check your inbox for a welcome email.",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error
+        ? error.message || "Failed to subscribe. Please try again."
+        : "Something went wrong. Please try again.",
+    };
+  }
+}
+
+export async function getSubscribers(): Promise<Array<INewsletter & { _id: string }>> {
+  await dbConnect();
+  const subscribers = await Newsletter.find().sort({ createdAt: -1 }).lean();
+  return JSON.parse(JSON.stringify(subscribers));
+}
+
+export async function getSubscriberCount(): Promise<number> {
+  await dbConnect();
+  return Newsletter.countDocuments();
+}
+
+export async function deleteSubscriber(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    await dbConnect();
+
+    const deleted = await Newsletter.findByIdAndDelete(id);
+    if (!deleted) {
+      return { success: false, message: "Subscriber not found" };
+    }
+
+    revalidatePath("/admin/subscribers");
+    revalidateTag("subscribers", "max");
+    return { success: true, message: "Subscriber removed successfully" };
+  } catch {
+    return { success: false, message: "Admin access required" };
+  }
+}
+
+export async function deleteSubscriberForm(formData: FormData): Promise<void> {
+  const id = formData.get("subscriberId")?.toString();
+  if (id) {
+    await deleteSubscriber(id);
+  }
+}
+
+================
+File: src/features/newsletter/components/NewsletterSection.tsx
+================
+"use client";
+
+import { useState } from "react";
+import { Mail, Check, Loader2, Sparkles } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { z } from "zod";
+import { toast } from "sonner";
+
+import { subscribeToNewsletter } from "../actions/subscribe";
+import { newsletterSchema, NewsletterInput } from "../validation";
+
+type NewsletterFormInput = z.input<typeof newsletterSchema>;
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+type NewsletterSectionProps = {
+  className?: string;
+  variant?: "default" | "compact" | "footer";
+  source?: "homepage" | "footer" | "popup" | "checkout";
+};
+
+export function NewsletterSection({
+  className,
+  variant = "default",
+  source = "homepage",
+}: NewsletterSectionProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<NewsletterFormInput, unknown, NewsletterInput>({
+    resolver: zodResolver(newsletterSchema),
+    defaultValues: {
+      email: "",
+      source,
+    },
+  });
+
+  const onSubmit = async (data: NewsletterInput) => {
+    setIsSubmitting(true);
+
+    try {
+      const result = await subscribeToNewsletter(data);
+
+      if (result.success) {
+        setIsSuccess(true);
+        toast.success(result.message || "Subscribed successfully!");
+        reset();
+        // Reset success state after 5 seconds
+        setTimeout(() => setIsSuccess(false), 5000);
+      } else {
+        toast.error(result.message || "Failed to subscribe");
+        if (result.fieldErrors?.email) {
+          // The error is already displayed in the form
+        }
+      }
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Compact variant for footer
+  if (variant === "compact") {
+    return (
+      <div className={cn("space-y-3", className)}>
+        <p className="text-sm text-muted-foreground">
+          Subscribe for exclusive offers & updates
+        </p>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex gap-2">
+          <div className="flex-1">
+            <Input
+              type="email"
+              placeholder="Enter your email"
+              {...register("email")}
+              disabled={isSubmitting || isSuccess}
+              className="h-9 text-sm"
+            />
+            {errors.email && (
+              <p className="text-xs text-destructive mt-1">
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={isSubmitting || isSuccess}
+            className="shrink-0"
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isSuccess ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              "Subscribe"
+            )}
+          </Button>
+        </form>
+      </div>
+    );
+  }
+
+  // Default homepage variant
+  return (
+    <section className={cn("w-full py-8", className)}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <Card className="relative overflow-hidden border-primary/10 bg-linear-to-br from-primary/5 via-background to-primary/5">
+          {/* Decorative element */}
+          <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
+          <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
+
+          <CardContent className="relative p-8 sm:p-12">
+            <div className="flex flex-col items-center text-center max-w-2xl mx-auto gap-6">
+              {/* Badge */}
+              <Badge variant="outline" className="gap-1.5 px-3 py-1">
+                <Sparkles className="h-3.5 w-3.5" />
+                Stay Updated
+              </Badge>
+
+              {/* Header */}
+              <div className="space-y-2">
+                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+                  Join the <span className="text-primary">Community</span>
+                </h2>
+                <p className="text-muted-foreground text-balance max-w-md mx-auto">
+                  Subscribe to get exclusive offers, early access to new
+                  collections, and 10% off your first order!
+                </p>
+              </div>
+
+              {/* Success State */}
+              {isSuccess ? (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="rounded-full bg-green-500/10 p-3">
+                    <Check className="h-8 w-8 text-green-500" />
+                  </div>
+                  <p className="text-lg font-medium text-green-600 dark:text-green-400">
+                    You&apos;re subscribed! 🎉
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Check your inbox for a confirmation email.
+                  </p>
+                </div>
+              ) : (
+                /* Form */
+                <form
+                  onSubmit={handleSubmit(onSubmit)}
+                  className="w-full max-w-md space-y-3"
+                >
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <Label htmlFor="email" className="sr-only">
+                        Email address
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="Enter your email address"
+                          className="pl-9 h-11"
+                          {...register("email")}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      {errors.email && (
+                        <p className="text-xs text-destructive mt-1.5 text-left">
+                          {errors.email.message}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="submit"
+                      size="lg"
+                      disabled={isSubmitting}
+                      className="shrink-0 sm:min-w-32"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Subscribing...
+                        </>
+                      ) : (
+                        <>
+                          Subscribe
+                          <span className="hidden sm:inline ml-1">→</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    ✦ No spam. Unsubscribe anytime. ✦
+                  </p>
+                </form>
+              )}
+
+              {/* Trust badges mini */}
+              <div className="flex flex-wrap justify-center gap-4 pt-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-green-500">✓</span> No spam
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-green-500">✓</span> Unsubscribe anytime
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-green-500">✓</span> 10% off first order
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+  );
+}
+
+================
+File: src/features/newsletter/validation.ts
+================
+import { z } from "zod";
+
+export const newsletterSchema = z.object({
+  email: z
+    .string()
+    .email("Please enter a valid email address")
+    .min(5, "Email is too short")
+    .max(255, "Email is too long"),
+  source: z
+    .enum(["homepage", "footer", "popup", "checkout"])
+    .optional()
+    .default("homepage"),
+});
+
+export type NewsletterInput = z.infer<typeof newsletterSchema>;
+
+================
+File: src/features/trust/components/TrustSignals.tsx
+================
+"use client";
+
+import {
+  Truck,
+  RotateCcw,
+  Shield,
+  Headphones,
+  Star,
+  CreditCard,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type TrustSignal = {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+};
+
+type TrustSignalsProps = {
+  className?: string;
+  variant?: "grid" | "row" | "compact";
+  signals?: TrustSignal[];
+};
+
+const defaultSignals: TrustSignal[] = [
+  {
+    icon: <Truck className="h-6 w-6" />,
+    title: "Free Shipping",
+    description: "On orders over $50",
+  },
+  {
+    icon: <RotateCcw className="h-6 w-6" />,
+    title: "Easy Returns",
+    description: "30-day money-back guarantee",
+  },
+  {
+    icon: <Shield className="h-6 w-6" />,
+    title: "Secure Checkout",
+    description: "SSL encrypted payments",
+  },
+  {
+    icon: <Headphones className="h-6 w-6" />,
+    title: "24/7 Support",
+    description: "Live chat & email support",
+  },
+  {
+    icon: <Star className="h-6 w-6" />,
+    title: "Trusted Brand",
+    description: "10,000+ happy customers",
+  },
+  {
+    icon: <CreditCard className="h-6 w-6" />,
+    title: "All Major Cards",
+    description: "Visa, Mastercard, Amex, PayPal",
+  },
+];
+
+export function TrustSignals({
+  className,
+  variant = "grid",
+  signals = defaultSignals,
+}: TrustSignalsProps) {
+  const displaySignals = variant === "compact" ? signals.slice(0, 4) : signals;
+
+  return (
+    <section className={cn("w-full py-6", className)}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {variant === "row" ? (
+          // Horizontal row variant
+          <div className="flex flex-wrap justify-center items-center gap-8 divide-x divide-border/50">
+            {displaySignals.map((signal, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-3 px-4 first:pl-0 last:pr-0"
+              >
+                <div className="text-primary/70">{signal.icon}</div>
+                <div>
+                  <p className="text-sm font-medium">{signal.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {signal.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : variant === "compact" ? (
+          // Compact grid (4 items)
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {displaySignals.map((signal, index) => (
+              <div
+                key={index}
+                className="flex flex-col items-center text-center p-4 rounded-lg bg-card/50 hover:bg-card transition-colors border border-transparent hover:border-border"
+              >
+                <div className="text-primary/70 mb-2">{signal.icon}</div>
+                <p className="text-sm font-medium">{signal.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {signal.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Default grid (full)
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {displaySignals.map((signal, index) => (
+              <div
+                key={index}
+                className="flex flex-col items-center text-center p-4 rounded-lg bg-card/30 hover:bg-card/60 transition-all hover:shadow-sm border border-transparent hover:border-border/50 group"
+              >
+                <div className="text-primary/60 group-hover:text-primary transition-colors mb-2">
+                  {signal.icon}
+                </div>
+                <p className="text-sm font-medium text-foreground/90">
+                  {signal.title}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {signal.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+================
+File: src/lib/email.ts
+================
+import "server-only";
+import nodemailer from "nodemailer";
+
+// Create transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
+
+export async function sendWelcomeEmail(email: string) {
+  try {
+    const info = await transporter.sendMail({
+      from: `"Our Store" <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject: "Welcome to Our Store! 🎉",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h1 style="color: #333; text-align: center;">Welcome to Our Store!</h1>
+          <p style="color: #555; font-size: 16px; line-height: 1.6;">
+            Hi there,
+          </p>
+          <p style="color: #555; font-size: 16px; line-height: 1.6;">
+            Thanks for subscribing to our newsletter! You'll now receive exclusive offers,
+            early access to new collections, and <strong>10% off your first order</strong>.
+          </p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://yourstore.com" 
+               style="background-color: #000; color: #fff; padding: 12px 30px; 
+                      text-decoration: none; border-radius: 8px; font-weight: bold;">
+              Start Shopping
+            </a>
+          </div>
+          <p style="color: #555; font-size: 16px;">
+            Use code: <strong style="color: #000;">WELCOME10</strong> at checkout!
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+          <p style="color: #888; font-size: 12px; text-align: center;">
+            You can unsubscribe anytime by clicking the link in future emails.
+          </p>
+        </div>
+      `,
+      text: `
+        Welcome to Our Store!
+        
+        Thanks for subscribing! You'll receive exclusive offers and 10% off your first order.
+        
+        Use code: WELCOME10 at checkout!
+        
+        Start shopping: https://yourstore.com
+      `,
+    });
+
+    console.log("Email sent:", info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("Failed to send email:", error);
+    return { success: false, error };
+  }
+}
+
+================
+File: src/models/Newsletter.ts
+================
+import { Schema, model, models } from "mongoose";
+
+export interface INewsletter {
+  email: string;
+  source?: string; // e.g., "homepage", "footer", "popup"
+  isConfirmed: boolean;
+  confirmedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const newsletterSchema = new Schema<INewsletter>(
+  {
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: [
+        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+        "Please provide a valid email address",
+      ],
+    },
+    source: {
+      type: String,
+      enum: ["homepage", "footer", "popup", "checkout"],
+      default: "homepage",
+    },
+    isConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+    confirmedAt: {
+      type: Date,
+    },
+  },
+  { timestamps: true }
+);
+
+// Index for fast lookups
+newsletterSchema.index({ email: 1 });
+newsletterSchema.index({ isConfirmed: 1, createdAt: -1 });
+
+export const Newsletter =
+  models.Newsletter || model<INewsletter>("Newsletter", newsletterSchema);
 
 ================
 File: .repomix/bundles.json
@@ -344,6 +1069,140 @@ export default function MarketingLayout({
   return (
     <div className="w-full border rounded-lg p-5">
       {children}
+    </div>
+  );
+}
+
+================
+File: src/app/(shop)/brands/page.tsx
+================
+// // src/app/brands/page.tsx
+// import { getActiveBrands } from "@/features/brand/queries/get-active-brands";
+// import { BrandGrid } from "@/features/brand/components/BrandGrid";
+// import { Button } from "@/components/ui/button";
+// import { ArrowLeft, Search } from "lucide-react";
+// import Link from "next/link";
+// import { Input } from "@/components/ui/input";
+
+// export default async function BrandsPage() {
+//   const brands = await getActiveBrands(100); // Get all active brands
+
+//   return (
+//     <div className="min-h-screen bg-background">
+//       {/* Header Section */}
+//       <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+//         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+//           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+//             <div className="flex items-center gap-3">
+//               <Link href="/">
+//                 <Button variant="ghost" size="icon" className="h-9 w-9">
+//                   <ArrowLeft className="h-4 w-4" />
+//                 </Button>
+//               </Link>
+//               <div>
+//                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+//                   All Brands
+//                 </h1>
+//                 <p className="text-sm text-muted-foreground hidden sm:block">
+//                   Discover products from {brands.length} brands
+//                 </p>
+//               </div>
+//             </div>
+            
+//             {/* Search - Will work with client component */}
+//             <div className="w-full sm:w-auto">
+//               <div className="relative">
+//                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+//                 <Input
+//                   placeholder="Search brands..."
+//                   className="pl-9 w-full sm:w-64"
+//                   // We'll add search functionality later
+//                 />
+//               </div>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* Brand Grid */}
+//       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+//         <BrandGrid brands={brands} />
+//       </div>
+//     </div>
+//   );
+
+
+
+// }
+
+
+
+
+
+// src/app/brands/page.tsx (with search)
+import { getActiveBrands } from "@/features/brand/queries/get-active-brands";
+import { BrandGrid } from "@/features/brand/components/BrandGrid";
+import { BrandSearch } from "@/features/brand/components/BrandSearch";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+
+export default async function BrandsPage() {
+  const brands = await getActiveBrands(100);
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header with Search */}
+      <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Link href="/">
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                  All Brands
+                </h1>
+                <p className="text-sm text-muted-foreground hidden sm:block">
+                  Discover products from {brands.length} brands
+                </p>
+              </div>
+            </div>
+            
+            <BrandSearch brands={brands} />
+          </div>
+        </div>
+      </div>
+
+      {/* Brand Grid */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <BrandGrid brands={brands} />
+      </div>
+    </div>
+  );
+}
+
+================
+File: src/app/(shop)/products/page.tsx
+================
+// src/app/products/page.tsx (Create this if it doesn't exist)
+import { getFeaturedProducts } from "@/features/product/queries/get-featured-products";
+import { ProductCard } from "@/features/product/components/ProductCard";
+
+export default async function ProductsPage() {
+  const products = await getFeaturedProducts({ limit: 50, type: "newArrivals" });
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <h1 className="text-3xl font-bold tracking-tight mb-8">All Products</h1>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+        {products.map((product) => (
+          <ProductCard key={product._id} product={product} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -5446,6 +6305,99 @@ export function BrandForm({ mode, brand }: Props) {
 }
 
 ================
+File: src/features/brand/components/BrandGrid.tsx
+================
+// src/features/brand/components/BrandGrid.tsx
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { Building2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import type { BrandDTO } from "../types";
+
+type BrandGridProps = {
+  brands: BrandDTO[];
+  showCount?: boolean;
+};
+
+export function BrandGrid({ brands, showCount = true }: BrandGridProps) {
+  if (!brands || brands.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-medium">No brands available</h3>
+        <p className="text-sm text-muted-foreground">Check back later for new brands.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {showCount && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing <span className="font-medium text-foreground">{brands.length}</span> brands
+          </p>
+          <Badge variant="outline" className="text-xs">
+            {brands.length} total
+          </Badge>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        {brands.map((brand) => (
+          <BrandCard key={brand.id} brand={brand} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Individual Brand Card
+function BrandCard({ brand }: { brand: BrandDTO }) {
+  return (
+    <Link
+      href={`/products?brandId=${brand.id}`}
+      className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+    >
+      <Card className="h-full border hover:border-primary/30 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] bg-card/50 backdrop-blur-sm hover:bg-card">
+        <CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full gap-3 sm:gap-4">
+          {/* Brand Logo */}
+          <div className="relative w-full aspect-square max-h-20 sm:max-h-24 md:max-h-28 flex items-center justify-center p-3 bg-muted/30 rounded-lg group-hover:bg-muted/50 transition-colors">
+            {brand.logo ? (
+              <Image
+                src={brand.logo}
+                alt={brand.name}
+                fill
+                className="object-contain p-1 transition-transform duration-300 group-hover:scale-105"
+                sizes="(max-width: 640px) 80px, (max-width: 768px) 100px, 120px"
+                loading="lazy"
+              />
+            ) : (
+              <Building2 className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors" />
+            )}
+          </div>
+
+          {/* Brand Name */}
+          <div className="text-center w-full">
+            <p className="text-xs sm:text-sm font-medium text-foreground/80 group-hover:text-primary transition-colors line-clamp-2">
+              {brand.name}
+            </p>
+            {brand.description && (
+              <p className="text-xs text-muted-foreground line-clamp-1 mt-1 hidden sm:block">
+                {brand.description}
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+================
 File: src/features/brand/components/BrandRowActions.tsx
 ================
 "use client";
@@ -5490,6 +6442,402 @@ export function BrandRowActions({ id, name }: { id: string; name: string }) {
       </Button>
     </div>
   );
+}
+
+================
+File: src/features/brand/components/BrandSearch.tsx
+================
+// src/features/brand/components/BrandSearch.tsx
+"use client";
+
+import { useState, useMemo } from "react";
+import { Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import type { BrandDTO } from "../types";
+
+type BrandSearchProps = {
+  brands: BrandDTO[];
+};
+
+export function BrandSearch({ brands }: BrandSearchProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showResults, setShowResults] = useState(false);
+
+  const filteredBrands = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const query = searchQuery.toLowerCase().trim();
+    return brands
+      .filter((brand) => 
+        brand.name.toLowerCase().includes(query) ||
+        brand.description?.toLowerCase().includes(query)
+      )
+      .slice(0, 6);
+  }, [brands, searchQuery]);
+
+  const handleSearch = (value: string) => {
+    setSearchQuery(value);
+    setShowResults(value.length > 0);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    setShowResults(false);
+  };
+
+  return (
+    <div className="relative w-full sm:w-auto">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search brands..."
+          className="pl-9 pr-8 w-full sm:w-64"
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+          onFocus={() => searchQuery && setShowResults(true)}
+          onBlur={() => setTimeout(() => setShowResults(false), 200)}
+        />
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+            onClick={clearSearch}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+
+      {/* Search Results Dropdown */}
+      {showResults && filteredBrands.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-popover border rounded-lg shadow-lg p-2 z-50 max-h-80 overflow-y-auto">
+          {filteredBrands.map((brand) => (
+            <a
+              key={brand.id}
+              href={`/products?brandId=${brand.id}`}
+              className="flex items-center gap-3 p-2 rounded-md hover:bg-muted transition-colors"
+              onClick={() => clearSearch()}
+            >
+              {brand.logo ? (
+                <div className="relative h-8 w-8 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={brand.logo}
+                    alt={brand.name}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="h-8 w-8 shrink-0 bg-muted rounded-md flex items-center justify-center">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{brand.name}</p>
+                {brand.description && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {brand.description}
+                  </p>
+                )}
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                View
+              </Badge>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {showResults && searchQuery && filteredBrands.length === 0 && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-popover border rounded-lg shadow-lg p-4 z-50 text-center">
+          <p className="text-sm text-muted-foreground">
+            No brands found matching &quot;{searchQuery}&quot;
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+================
+File: src/features/brand/components/BrandStrip.tsx
+================
+// src/features/brand/components/BrandStrip.tsx
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, Building2 } from "lucide-react";
+
+import type { BrandDTO } from "../types";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+import { useRef, useState, useEffect } from "react";
+
+type BrandStripProps = {
+  brands: BrandDTO[];
+  title?: string;
+  subtitle?: string;
+  showViewAll?: boolean;
+  className?: string;
+};
+
+export function BrandStrip({
+  brands,
+  title = "Shop by Brand",
+  subtitle = "Discover products from your favorite brands",
+  showViewAll = true,
+  className,
+}: BrandStripProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const scroll = (direction: "left" | "right") => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const scrollAmount = container.clientWidth * 0.75;
+    const target =
+      direction === "left"
+        ? container.scrollLeft - scrollAmount
+        : container.scrollLeft + scrollAmount;
+
+    container.scrollTo({
+      left: target,
+      behavior: "smooth",
+    });
+  };
+
+  const handleScroll = () => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    setShowLeftArrow(container.scrollLeft > 0);
+    setShowRightArrow(
+      container.scrollLeft < container.scrollWidth - container.clientWidth - 10
+    );
+  };
+
+  // Mouse drag scrolling
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    setIsDragging(true);
+    setStartX(e.pageX - container.offsetLeft);
+    setScrollLeft(container.scrollLeft);
+    container.style.cursor = "grabbing";
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const container = scrollRef.current;
+    if (!container) return;
+
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    container.scrollLeft = scrollLeft - walk;
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    const container = scrollRef.current;
+    if (container) container.style.cursor = "grab";
+  };
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll);
+    handleScroll();
+
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  if (!brands || brands.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className={cn("w-full py-8", className)}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <Badge variant="outline" className="mb-2">
+              Brands
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              {title}
+            </h2>
+            {subtitle && (
+              <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+            )}
+          </div>
+          {showViewAll && brands.length > 6 && (
+            <Button
+              variant="ghost"
+              className="gap-1 text-sm font-medium"
+              nativeButton={false}
+              render={<Link href="/brands" />}
+            >
+              View All <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* Brand Strip Container */}
+        <div className="relative group">
+          {/* Left Scroll Button */}
+          {showLeftArrow && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm shadow-lg border-border hover:bg-background transition-all duration-200 hidden md:flex"
+              onClick={() => scroll("left")}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* Scrollable Brand Cards */}
+          <div
+            ref={scrollRef}
+            className="flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory py-4 px-1 cursor-grab"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            {brands.map((brand) => (
+              <BrandCard key={brand.id} brand={brand} />
+            ))}
+
+            {/* Empty state filler for smooth scrolling */}
+            {brands.length > 6 && (
+              <div className="min-w-px shrink-0" aria-hidden="true" />
+            )}
+          </div>
+
+          {/* Right Scroll Button */}
+          {showRightArrow && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm shadow-lg border-border hover:bg-background transition-all duration-200 hidden md:flex"
+              onClick={() => scroll("right")}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* Mobile indicator */}
+        <div className="flex justify-center gap-1 mt-4 md:hidden">
+          {brands.slice(0, 6).map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "h-1 w-6 rounded-full transition-all duration-300",
+                i === 0 ? "bg-primary w-8" : "bg-muted"
+              )}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Brand Card Component
+function BrandCard({ brand }: { brand: BrandDTO }) {
+  return (
+    <Link
+      href={`/products?brandId=${brand.id}`}
+      className="group shrink-0 snap-start w-28 sm:w-36 md:w-40 lg:w-44"
+    >
+      <Card className="h-full border hover:border-primary/30 hover:shadow-md transition-all duration-300 bg-card/50 backdrop-blur-sm hover:bg-card">
+        <CardContent className="p-4 flex flex-col items-center justify-center h-full gap-3">
+          {/* Brand Logo */}
+          <div className="relative w-full aspect-square max-h-16 md:max-h-20 flex items-center justify-center p-2 bg-muted/30 rounded-lg group-hover:bg-muted/50 transition-colors">
+            {brand.logo ? (
+              <Image
+                src={brand.logo}
+                alt={brand.name}
+                fill
+                className="object-contain p-1 transition-transform duration-300 group-hover:scale-105"
+                sizes="(max-width: 640px) 80px, (max-width: 768px) 100px, 120px"
+              />
+            ) : (
+              <Building2 className="h-8 w-8 text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors" />
+            )}
+          </div>
+
+          {/* Brand Name */}
+          <div className="text-center w-full">
+            <p className="text-xs sm:text-sm font-medium text-foreground/80 group-hover:text-primary transition-colors line-clamp-2">
+              {brand.name}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+================
+File: src/features/brand/queries/get-active-brands.ts
+================
+// src/features/brand/queries/get-active-brands.ts
+import "server-only";
+import { unstable_cache } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Brand } from "@/models/Brand";
+import type { BrandDTO } from "../types";
+
+const getCachedActiveBrands = unstable_cache(
+  async (limit: number = 12): Promise<BrandDTO[]> => {
+    await dbConnect();
+
+    const brands = await Brand.find({ status: "active" })
+      .sort({ sortOrder: 1, name: 1 })
+      .limit(limit)
+      .lean();
+
+    return brands.map((brand) => ({
+      id: brand._id.toString(),
+      name: brand.name,
+      slug: brand.slug,
+      description: brand.description,
+      logo: brand.logo,
+      logoPublicId: brand.logoPublicId,
+      status: brand.status,
+      sortOrder: brand.sortOrder ?? 0,
+      createdAt: brand.createdAt.toISOString(),
+      updatedAt: brand.updatedAt.toISOString(),
+    }));
+  },
+  ["active-brands"],
+  { tags: ["brands"], revalidate: 3600 } // Revalidate every hour
+);
+
+export async function getActiveBrands(limit: number = 12): Promise<BrandDTO[]> {
+  return getCachedActiveBrands(limit);
 }
 
 ================
@@ -6572,107 +7920,6 @@ function HeroBannerFormDialogContent({ open, onOpenChange, initialData }: Props)
 }
 
 ================
-File: src/features/hero/components/HeroBannerSection.tsx
-================
-"use client";
-
-import { useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
-import { Copy, Check, ArrowRight, Tag } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-
-export type HeroBannerData = {
-  _id: string;
-  title: string;
-  subtitle?: string;
-  ctaText: string;
-  ctaLink: string;
-  badgeText?: string;
-  couponCode?: string;
-  imageUrl: string;
-};
-
-export function HeroBannerSection({ banner }: { banner: HeroBannerData }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    if (!banner.couponCode) return;
-    navigator.clipboard.writeText(banner.couponCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <section className="relative overflow-hidden rounded-3xl bg-card border shadow-sm">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center p-8 lg:p-12">
-        
-        {/* Left Content */}
-        <div className="lg:col-span-7 space-y-6">
-          {banner.badgeText && (
-            <Badge variant="secondary" className="px-3 py-1 text-xs font-semibold uppercase tracking-wider">
-              {banner.badgeText}
-            </Badge>
-          )}
-
-          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground leading-tight">
-            {banner.title}
-          </h1>
-
-          {banner.subtitle && (
-            <p className="text-lg text-muted-foreground max-w-xl">
-              {banner.subtitle}
-            </p>
-          )}
-
-          {/* Optional Coupon Code Box */}
-          {banner.couponCode && (
-            <div className="inline-flex items-center gap-3 p-2 pr-4 bg-muted/60 border rounded-xl">
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-background rounded-lg text-sm font-mono font-bold text-primary border">
-                <Tag className="h-3.5 w-3.5" />
-                {banner.couponCode}
-              </div>
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={handleCopy}
-                className="gap-1 text-xs"
-              >
-                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-                {copied ? "Copied" : "Copy Code"}
-              </Button>
-            </div>
-          )}
-
-          {/* Call to Action */}
-          <div>
-            <Button size="lg" className="rounded-xl gap-2 font-medium shadow-md" >
-              <Link href={banner.ctaLink}>
-                {banner.ctaText}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        {/* Right Image Display */}
-        <div className="lg:col-span-5 relative aspect-4/3 w-full rounded-2xl overflow-hidden bg-muted">
-          <Image
-            src={banner.imageUrl}
-            alt={banner.title}
-            fill
-            priority
-            className="object-cover"
-          />
-        </div>
-
-      </div>
-    </section>
-  );
-}
-
-================
 File: src/features/hero/components/HeroBannerTable.tsx
 ================
 // src/features/hero/components/HeroBannerTable.tsx
@@ -7087,708 +8334,497 @@ export async function uploadImagesToCloudinary(
 }
 
 ================
-File: src/features/product/components/ProductForm.tsx
+File: src/features/product/components/FeaturedProductsSection.tsx
 ================
+// src/features/product/components/FeaturedProductsSection.tsx
 "use client";
 
-import { useState, useTransition, useRef } from "react";
-import Image from "next/image";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  Loader2,
-  AlertCircle,
-  Plus,
-  Trash2,
-  Upload,
-  X,
-  Layers,
-} from "lucide-react";
-
-import { createProduct } from "../actions/create-product";
-import { updateProduct } from "../actions/update-product";
-import type { IProduct } from "../types";
-
+import { ChevronLeft, ChevronRight, Sparkles, TrendingUp, Clock } from "lucide-react";
+import { ProductCard } from "./ProductCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { uploadImagesToCloudinary } from "../actions/upload-images";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { IProduct } from "../types";
+import { cn } from "@/lib/utils";
 
-type CategoryOrBrandOption = {
-  _id: string;
-  name: string;
+type FeaturedProductsSectionProps = {
+  featuredProducts: IProduct[];
+  bestSellingProducts: IProduct[];
+  newArrivals: IProduct[];
+  className?: string;
 };
 
-type Props = {
-  mode: "create" | "edit";
-  product?: IProduct;
-  categories: CategoryOrBrandOption[];
-  brands: CategoryOrBrandOption[];
-};
-
-type FormVariant = {
-  _id?: string;
-  sku: string;
-  price: number;
-  discountPrice?: number;
-  stock: number;
-  attributes: { key: string; value: string }[];
-};
-
-export function ProductForm({ mode, product, categories, brands }: Props) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
-  const [formError, setFormError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-
-  // Category and Brand selects
-  const [categoryId, setCategoryId] = useState<string>(
-    typeof product?.categoryId === "object"
-      ? String(product.categoryId._id)
-      : String(product?.categoryId || ""),
-  );
-  const [brandId, setBrandId] = useState<string>(
-    typeof product?.brandId === "object"
-      ? String(product.brandId._id)
-      : String(product?.brandId || ""),
-  );
-  const [status, setStatus] = useState<"active" | "inactive">(
-    product?.status ?? "active",
+export function FeaturedProductsSection({
+  featuredProducts,
+  bestSellingProducts,
+  newArrivals,
+  className,
+}: FeaturedProductsSectionProps) {
+  const [activeTab, setActiveTab] = useState<"featured" | "bestSelling" | "newArrivals">(
+    "featured"
   );
 
-  // 1. Existing Cloudinary Images & Public IDs State
-  const [existingImages, setExistingImages] = useState<string[]>(
-    product?.images || [],
-  );
-  const [existingPublicIds, setExistingPublicIds] = useState<string[]>(
-    product?.imagePublicIds || [],
-  );
+  const tabs = [
+    {
+      id: "featured",
+      label: "Featured",
+      icon: Sparkles,
+      products: featuredProducts,
+      count: featuredProducts.length,
+    },
+    {
+      id: "bestSelling",
+      label: "Best Selling",
+      icon: TrendingUp,
+      products: bestSellingProducts,
+      count: bestSellingProducts.length,
+    },
+    {
+      id: "newArrivals",
+      label: "New Arrivals",
+      icon: Clock,
+      products: newArrivals,
+      count: newArrivals.length,
+    },
+  ];
 
-  // 2. New File Upload Previews
-  const [newFiles, setNewFiles] = useState<File[]>([]);
-  const [newFilePreviews, setNewFilePreviews] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentProducts =
+    tabs.find((t) => t.id === activeTab)?.products || [];
 
-  // 3. Dynamic Variants State
-  const [variants, setVariants] = useState<FormVariant[]>(() => {
-    if (product?.variants && product.variants.length > 0) {
-      return product.variants.map((v) => ({
-        _id: v._id,
-        sku: v.sku,
-        price: v.price,
-        discountPrice: v.discountPrice,
-        stock: v.stock,
-        attributes: v.attributes
-          ? Object.entries(v.attributes).map(([key, value]) => ({ key, value }))
-          : [],
-      }));
-    }
-    return [
-      {
-        sku: "",
-        price: 0,
-        stock: 0,
-        attributes: [{ key: "color", value: "Black" }],
-      },
-    ];
-  });
-
-  function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-  });
-}
-
-  // Handle New File Selection
-  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-
-    // Validate size (< 5MB each)
-    const validFiles = files.filter((f) => f.size <= 5 * 1024 * 1024);
-    if (validFiles.length < files.length) {
-      setFormError("Some images exceeded the 5MB file limit and were skipped.");
-    }
-
-    const updatedFiles = [...newFiles, ...validFiles];
-    setNewFiles(updatedFiles);
-
-    const updatedPreviews = [
-      ...newFilePreviews,
-      ...validFiles.map((file) => URL.createObjectURL(file)),
-    ];
-    setNewFilePreviews(updatedPreviews);
+  // If no products in any category, don't render
+  if (tabs.every((t) => t.products.length === 0)) {
+    return null;
   }
-
-  // Remove individual Existing Image
-  function removeExistingImage(index: number) {
-    setExistingImages((prev) => prev.filter((_, i) => i !== index));
-    setExistingPublicIds((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  // Remove individual New Unsaved File
-  function removeNewFile(index: number) {
-    URL.revokeObjectURL(newFilePreviews[index]);
-    setNewFiles((prev) => prev.filter((_, i) => i !== index));
-    setNewFilePreviews((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  // Variant Helpers
-  function addVariant() {
-    setVariants((prev) => [
-      ...prev,
-      {
-        sku: "",
-        price: 0,
-        stock: 0,
-        attributes: [{ key: "", value: "" }],
-      },
-    ]);
-  }
-
-  function removeVariant(index: number) {
-    if (variants.length <= 1) {
-      setFormError("At least one variant is required.");
-      return;
-    }
-    setVariants((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function updateVariantField(
-    index: number,
-    field: keyof FormVariant,
-    val: unknown,
-  ) {
-    setVariants((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: val };
-      return updated;
-    });
-  }
-
-  function addAttribute(variantIndex: number) {
-    setVariants((prev) => {
-      const updated = [...prev];
-      updated[variantIndex].attributes.push({ key: "", value: "" });
-      return updated;
-    });
-  }
-
-  function removeAttribute(variantIndex: number, attrIndex: number) {
-    setVariants((prev) => {
-      const updated = [...prev];
-      updated[variantIndex].attributes = updated[
-        variantIndex
-      ].attributes.filter((_, i) => i !== attrIndex);
-      return updated;
-    });
-  }
-
-  function updateAttribute(
-    variantIndex: number,
-    attrIndex: number,
-    keyOrValue: "key" | "value",
-    val: string,
-  ) {
-    setVariants((prev) => {
-      const updated = [...prev];
-      updated[variantIndex].attributes[attrIndex][keyOrValue] = val;
-      return updated;
-    });
-  }
-
-  // Submit Handler
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-  e.preventDefault();
-  setFormError(null);
-  setFieldErrors({});
-
-  if (!categoryId) return setFormError("Please select a category.");
-  if (!brandId) return setFormError("Please select a brand.");
-
-  const form = e.currentTarget;
-  const formData = new FormData(form);
-
-  startTransition(async () => {
-    try {
-      const finalImages = [...existingImages];
-      const finalPublicIds = [...existingPublicIds];
-
-      // Upload new selected files if any exist
-      if (newFiles.length > 0) {
-        const base64Files = await Promise.all(newFiles.map(fileToBase64));
-        const uploaded = await uploadImagesToCloudinary(base64Files);
-
-        uploaded.forEach((img) => {
-          finalImages.push(img.url);
-          finalPublicIds.push(img.publicId);
-        });
-      }
-
-      // Format Variants
-      const formattedVariants = variants.map((v) => {
-        const attributesRecord: Record<string, string> = {};
-        v.attributes.forEach((attr) => {
-          if (attr.key.trim() && attr.value.trim()) {
-            attributesRecord[attr.key.trim().toLowerCase()] = attr.value.trim();
-          }
-        });
-
-        return {
-          _id: v._id,
-          sku: v.sku.trim().toUpperCase(),
-          price: Number(v.price),
-          discountPrice: v.discountPrice ? Number(v.discountPrice) : undefined,
-          stock: Number(v.stock),
-          attributes: attributesRecord,
-        };
-      });
-
-      // Construct Payload with populated Cloudinary array data
-      const payload = {
-        name: formData.get("name") as string,
-        slug: formData.get("slug") as string,
-        description: formData.get("description") as string,
-        categoryId,
-        brandId,
-        status,
-        images: finalImages,
-        imagePublicIds: finalPublicIds,
-        variants: formattedVariants,
-      };
-
-      const action =
-        mode === "create"
-          ? createProduct(payload)
-          : updateProduct(product!._id, payload);
-
-      const result = await action;
-
-      if (!result.success) {
-        setFormError(result.message);
-        setFieldErrors(result.fieldErrors || {});
-        return;
-      }
-
-      router.push("/admin/products");
-      router.refresh();
-    } catch (err: unknown) {
-      setFormError(
-        err instanceof Error ? err.message : "Failed to process image uploads."
-      );
-    }
-  });
-}
 
   return (
-    <Card className="max-w-5xl mx-auto">
-      <form onSubmit={handleSubmit}>
-        <CardHeader>
-          <CardTitle>
-            {mode === "create" ? "Add Product" : "Edit Product"}
-          </CardTitle>
-          <CardDescription>
-            Manage basic details, image gallery, and inventory variants.
-          </CardDescription>
-        </CardHeader>
+    <section className={cn("w-full py-8", className)}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6">
+          <div>
+            <Badge variant="outline" className="mb-2">
+              Products
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              Our Collection
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Discover our curated selection of premium products
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            className="gap-1 text-sm font-medium"
+            nativeButton={false}
+            render={<Link href="/products" />}
+          >
+            View All Products
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
 
-        <CardContent className="space-y-6">
-          {formError && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{formError}</AlertDescription>
-            </Alert>
+        {/* Tabs */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as typeof activeTab)
+          }
+          className="w-full"
+        >
+          <TabsList className="mb-6 bg-muted/50 p-1 w-full sm:w-auto">
+            {tabs.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="flex items-center gap-2 data-[state=active]:bg-background"
+              >
+                <tab.icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">
+                  {tab.id === "featured" ? "⭐" : tab.id === "bestSelling" ? "🔥" : "🆕"}
+                </span>
+                <Badge
+                  variant="secondary"
+                  className="ml-1 h-5 px-1.5 text-[10px] font-normal"
+                >
+                  {tab.count}
+                </Badge>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {tabs.map((tab) => (
+            <TabsContent key={tab.id} value={tab.id} className="mt-0">
+              {tab.products.length > 0 ? (
+                <ProductGrid products={tab.products} />
+              ) : (
+                <EmptyState type={tab.id as typeof activeTab} />
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      </div>
+    </section>
+  );
+}
+
+// Product Grid Component
+function ProductGrid({ products }: { products: IProduct[] }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+      {products.map((product) => (
+        <ProductCard key={product._id} product={product} variant="default" />
+      ))}
+    </div>
+  );
+}
+
+// Empty State
+function EmptyState({ type }: { type: "featured" | "bestSelling" | "newArrivals" }) {
+  const messages = {
+    featured: "No featured products available at the moment.",
+    bestSelling: "Best selling products will appear here soon.",
+    newArrivals: "New arrivals will be added shortly.",
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="rounded-full bg-muted p-4 mb-4">
+        {type === "featured" && <Sparkles className="h-6 w-6 text-muted-foreground" />}
+        {type === "bestSelling" && <TrendingUp className="h-6 w-6 text-muted-foreground" />}
+        {type === "newArrivals" && <Clock className="h-6 w-6 text-muted-foreground" />}
+      </div>
+      <h3 className="text-lg font-medium">No products yet</h3>
+      <p className="text-sm text-muted-foreground max-w-sm mt-1">
+        {messages[type]}
+      </p>
+    </div>
+  );
+}
+
+================
+File: src/features/product/components/ProductCard.tsx
+================
+// src/features/product/components/ProductCard.tsx
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useState } from "react";
+import { Heart, ShoppingCart, Eye } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import type { IProduct } from "../types";
+
+// Type guard to check if category/brand is populated
+function isPopulated(
+  item: unknown
+): item is { _id: string; name: string; slug: string } {
+  return item !== null && typeof item === "object" && "name" in item;
+}
+
+type ProductCardProps = {
+  product: IProduct;
+  variant?: "default" | "compact" | "featured";
+  showQuickView?: boolean;
+  className?: string;
+};
+
+export function ProductCard({
+  product,
+  variant = "default",
+  showQuickView = true,
+  className,
+}: ProductCardProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isWishlisted, setIsWishlisted] = useState(false);
+
+  const primaryImage = product.images?.[0];
+  const secondaryImage = product.images?.[1];
+  const hasDiscount = product.variants.some(
+    (v) => v.discountPrice && v.discountPrice < v.price
+  );
+  const lowestPrice = Math.min(...product.variants.map((v) => v.price));
+  const highestPrice = Math.max(...product.variants.map((v) => v.price));
+  const totalStock = product.variants.reduce((acc, v) => acc + v.stock, 0);
+  const isOutOfStock = totalStock === 0;
+
+  // Safely get category and brand names
+  const categoryName = isPopulated(product.categoryId) 
+    ? product.categoryId.name 
+    : "Category";
+  
+  const brandName = isPopulated(product.brandId) 
+    ? product.brandId.name 
+    : "Brand";
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(price);
+  };
+
+  const priceDisplay = () => {
+    if (lowestPrice === highestPrice) {
+      return formatPrice(lowestPrice);
+    }
+    return `${formatPrice(lowestPrice)} - ${formatPrice(highestPrice)}`;
+  };
+
+  // Compact variant for smaller displays
+  if (variant === "compact") {
+    return (
+      <Link
+        href={`/products/${product.slug}`}
+        className="group flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+      >
+        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-muted">
+          {primaryImage ? (
+            <Image
+              src={primaryImage}
+              alt={product.name}
+              fill
+              className="object-cover transition-transform group-hover:scale-105"
+              sizes="56px"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-muted">
+              <span className="text-xs text-muted-foreground">No image</span>
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+            {product.name}
+          </p>
+          <p className="text-sm font-semibold text-primary">
+            {formatPrice(lowestPrice)}
+          </p>
+        </div>
+      </Link>
+    );
+  }
+
+  return (
+    <Card
+      className={cn(
+        "group relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-primary/30",
+        isHovered && "shadow-lg",
+        className
+      )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Badges */}
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
+        {hasDiscount && (
+          <Badge className="bg-destructive/90 hover:bg-destructive/90 text-destructive-foreground border-none">
+            Sale
+          </Badge>
+        )}
+        {product.isFeatured && (
+          <Badge variant="secondary" className="bg-primary/20 text-primary border-none">
+            Featured
+          </Badge>
+        )}
+        {isOutOfStock && (
+          <Badge variant="outline" className="bg-background/80 backdrop-blur-sm">
+            Out of Stock
+          </Badge>
+        )}
+      </div>
+
+      {/* Wishlist Button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background transition-all opacity-0 group-hover:opacity-100"
+        onClick={(e) => {
+          e.preventDefault();
+          setIsWishlisted(!isWishlisted);
+        }}
+      >
+        <Heart
+          className={cn(
+            "h-4 w-4 transition-colors",
+            isWishlisted && "fill-red-500 text-red-500"
+          )}
+        />
+      </Button>
+
+      {/* Image Container */}
+      <Link href={`/products/${product.slug}`} className="block">
+        <div className="relative aspect-square overflow-hidden bg-muted">
+          {primaryImage ? (
+            <>
+              <Image
+                src={primaryImage}
+                alt={product.name}
+                fill
+                className={cn(
+                  "object-cover transition-all duration-500",
+                  isHovered && secondaryImage && "scale-110"
+                )}
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                priority={false}
+              />
+              {secondaryImage && isHovered && (
+                <Image
+                  src={secondaryImage}
+                  alt={`${product.name} - alternate view`}
+                  fill
+                  className="object-cover transition-opacity duration-300 opacity-100"
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                />
+              )}
+            </>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-muted">
+              <span className="text-sm text-muted-foreground">No image</span>
+            </div>
           )}
 
-          {/* Basic Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Product Name *</Label>
-              <Input
-                id="name"
-                name="name"
-                defaultValue={product?.name}
-                required
-                placeholder="e.g. Mechanical Gaming Keyboard"
-              />
-              {fieldErrors.name?.[0] && (
-                <p className="text-xs text-destructive">
-                  {fieldErrors.name[0]}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="slug">
-                Slug{" "}
-                <span className="text-xs text-muted-foreground">
-                  (optional)
-                </span>
-              </Label>
-              <Input
-                id="slug"
-                name="slug"
-                defaultValue={product?.slug}
-                placeholder="auto-generated-if-blank"
-              />
-              {fieldErrors.slug?.[0] && (
-                <p className="text-xs text-destructive">
-                  {fieldErrors.slug[0]}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Category *</Label>
-              <Select
-                value={categoryId}
-                onValueChange={(value) => {
-                  if (value !== null) setCategoryId(value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Brand *</Label>
-              <Select
-                value={brandId}
-                onValueChange={(value) => {
-                  if (value !== null) setBrandId(value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Brand" />
-                </SelectTrigger>
-                <SelectContent>
-                  {brands.map((b) => (
-                    <SelectItem key={b._id} value={b._id}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select
-                value={status}
-                onValueChange={(v) => setStatus(v as "active" | "inactive")}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              name="description"
-              defaultValue={product?.description}
-              rows={4}
-              placeholder="Detailed product features..."
-            />
-          </div>
-
-          {/* Product Gallery Section */}
-          <div className="space-y-3 pt-4 border-t">
-            <div>
-              <Label className="text-base font-semibold">Product Gallery</Label>
-              <p className="text-xs text-muted-foreground">
-                Upload image assets or manage existing Cloudinary images.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-              {/* Existing Images */}
-              {existingImages.map((src, index) => (
-                <div
-                  key={src}
-                  className="relative aspect-square rounded-md border overflow-hidden bg-muted group"
-                >
-                  <Image
-                    src={src}
-                    alt="Gallery item"
-                    fill
-                    className="object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeExistingImage(index)}
-                    className="absolute top-1 right-1 bg-destructive/80 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-
-              {/* New Selected Files Previews */}
-              {newFilePreviews.map((src, index) => (
-                <div
-                  key={src}
-                  className="relative aspect-square rounded-md border border-dashed border-primary overflow-hidden bg-muted group"
-                >
-                  <Image
-                    src={src}
-                    alt="New upload"
-                    fill
-                    className="object-cover"
-                  />
-                  <Badge className="absolute bottom-1 left-1 text-[9px] px-1 py-0">
-                    New
-                  </Badge>
-                  <button
-                    type="button"
-                    onClick={() => removeNewFile(index)}
-                    className="absolute top-1 right-1 bg-destructive/80 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-
-              {/* Upload Trigger Button */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="aspect-square flex flex-col items-center justify-center border-2 border-dashed rounded-md text-muted-foreground hover:border-primary hover:text-primary transition-colors bg-card"
-              >
-                <Upload className="h-5 w-5 mb-1" />
-                <span className="text-xs font-medium">Add Image</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageSelect}
-              />
-            </div>
-          </div>
-
-          {/* Variants Section */}
-          <div className="space-y-4 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-base font-semibold flex items-center gap-2">
-                  <Layers className="h-4 w-4" /> Product Variants *
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Define SKUs, prices, stock levels, and custom attributes.
-                </p>
-              </div>
+          {/* Quick View Overlay */}
+          {showQuickView && isHovered && !isOutOfStock && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity">
               <Button
-                type="button"
-                variant="outline"
+                variant="secondary"
                 size="sm"
-                onClick={addVariant}
+                className="gap-2 shadow-lg"
+                onClick={(e) => {
+                  e.preventDefault();
+                  // Quick view logic here
+                }}
               >
-                <Plus className="h-4 w-4 mr-1" /> Add Variant
+                <Eye className="h-4 w-4" />
+                Quick View
               </Button>
             </div>
+          )}
+        </div>
+      </Link>
 
-            <div className="space-y-4">
-              {variants.map((variant, vIdx) => (
+      {/* Product Info */}
+      <CardContent className="p-4 space-y-1.5">
+        <Link href={`/products/${product.slug}`}>
+          <h3 className="font-medium text-sm line-clamp-2 hover:text-primary transition-colors">
+            {product.name}
+          </h3>
+        </Link>
+
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{brandName}</span>
+          <span className="w-px h-3 bg-border" />
+          <span>{categoryName}</span>
+        </div>
+
+        <div className="flex items-center justify-between pt-1.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold text-primary">
+              {priceDisplay()}
+            </span>
+            {hasDiscount && (
+              <span className="text-sm text-muted-foreground line-through">
+                {formatPrice(highestPrice)}
+              </span>
+            )}
+          </div>
+          {!isOutOfStock && (
+            <Badge variant="outline" className="text-xs">
+              In Stock
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+
+      {/* Add to Cart Button */}
+      <CardFooter className="p-4 pt-0">
+        <Button
+          className="w-full gap-2 transition-all group-hover:shadow-lg group-hover:shadow-primary/20"
+          disabled={isOutOfStock}
+          onClick={(e) => {
+            e.preventDefault();
+            // Add to cart logic
+          }}
+        >
+          <ShoppingCart className="h-4 w-4" />
+          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+================
+File: src/features/product/components/ProductQuickView.tsx
+================
+// src/features/product/components/ProductQuickView.tsx
+"use client";
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { IProduct } from "../types";
+import { ProductCard } from "./ProductCard";
+
+type ProductQuickViewProps = {
+  product: IProduct | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+export function ProductQuickView({ product, open, onOpenChange }: ProductQuickViewProps) {
+  if (!product) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="sr-only">Quick View</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+            {product.images?.[0] && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={product.images[0]}
+                alt={product.name}
+                className="object-cover w-full h-full"
+              />
+            )}
+          </div>
+          <div className="flex flex-col gap-4">
+            <div>
+              <h3 className="text-xl font-bold">{product.name}</h3>
+              <p className="text-sm text-muted-foreground">
+                {product.description || "No description available"}
+              </p>
+            </div>
+            <div className="space-y-2">
+              {product.variants.map((variant) => (
                 <div
-                  key={variant._id || vIdx}
-                  className="p-4 border rounded-lg bg-card space-y-4 relative"
+                  key={variant.sku}
+                  className="flex items-center justify-between p-2 border rounded-lg"
                 >
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Variant #{vIdx + 1}
-                    </span>
-                    {variants.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-destructive hover:text-destructive"
-                        onClick={() => removeVariant(vIdx)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                      </Button>
-                    )}
+                  <div>
+                    <p className="text-sm font-medium">{variant.sku}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Stock: {variant.stock}
+                    </p>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                    <div>
-                      <Label className="text-xs">SKU *</Label>
-                      <Input
-                        value={variant.sku}
-                        onChange={(e) =>
-                          updateVariantField(vIdx, "sku", e.target.value)
-                        }
-                        placeholder="e.g. KBD-BLK-01"
-                        className="font-mono text-xs uppercase"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-xs">Price ($) *</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={variant.price}
-                        onChange={(e) =>
-                          updateVariantField(vIdx, "price", e.target.value)
-                        }
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-xs">Discount Price ($)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={variant.discountPrice || ""}
-                        onChange={(e) =>
-                          updateVariantField(
-                            vIdx,
-                            "discountPrice",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Optional"
-                      />
-                    </div>
-
-                    <div>
-                      <Label className="text-xs">Stock Quantity *</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={variant.stock}
-                        onChange={(e) =>
-                          updateVariantField(vIdx, "stock", e.target.value)
-                        }
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Attributes (e.g., Color, Size) */}
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs text-muted-foreground">
-                        Custom Attributes (e.g., Color, Size, RAM)
-                      </Label>
-                      <button
-                        type="button"
-                        onClick={() => addAttribute(vIdx)}
-                        className="text-xs text-primary hover:underline font-medium"
-                      >
-                        + Add Attribute
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {variant.attributes.map((attr, aIdx) => (
-                        <div key={aIdx} className="flex items-center gap-2">
-                          <Input
-                            placeholder="Key (e.g. color)"
-                            value={attr.key}
-                            onChange={(e) =>
-                              updateAttribute(vIdx, aIdx, "key", e.target.value)
-                            }
-                            className="h-8 text-xs"
-                          />
-                          <Input
-                            placeholder="Value (e.g. Red)"
-                            value={attr.value}
-                            onChange={(e) =>
-                              updateAttribute(
-                                vIdx,
-                                aIdx,
-                                "value",
-                                e.target.value,
-                              )
-                            }
-                            className="h-8 text-xs"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => removeAttribute(vIdx, aIdx)}
-                          >
-                            <X className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <p className="font-bold text-primary">
+                    ${variant.price}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
-        </CardContent>
-
-        <CardFooter className="flex justify-end gap-2 border-t pt-4">
-          <Link href="/admin/products">
-            <Button type="button" variant="outline" disabled={isPending}>
-              Cancel
-            </Button>
-          </Link>
-          <Button type="submit" disabled={isPending}>
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isPending
-              ? "Saving..."
-              : mode === "create"
-                ? "Create Product"
-                : "Save Changes"}
-          </Button>
-        </CardFooter>
-      </form>
-    </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -8095,6 +9131,71 @@ export function ProductsTable({ products }: Props) {
 }
 
 ================
+File: src/features/product/queries/get-featured-products.ts
+================
+// src/features/product/queries/get-featured-products.ts
+import "server-only";
+import { unstable_cache } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Product } from "@/models/Product";
+import "@/models/Category";
+import "@/models/Brand";
+import type { IProduct } from "../types";
+
+type GetFeaturedProductsOptions = {
+  limit?: number;
+  type?: "featured" | "bestSelling" | "newArrivals";
+};
+
+const getCachedFeaturedProducts = unstable_cache(
+  async (options: GetFeaturedProductsOptions = {}): Promise<IProduct[]> => {
+    const { limit = 8, type = "featured" } = options;
+    await dbConnect();
+
+    let query: Record<string, unknown> = { status: "active" };
+    let sort: Record<string, 1 | -1> = { createdAt: -1 };
+
+    switch (type) {
+      case "featured":
+        query = { ...query, isFeatured: true };
+        sort = { sortOrder: 1, createdAt: -1 };
+        break;
+      case "bestSelling":
+        // Note: You'll need a sales tracking system for this
+        // For now, we'll use a placeholder sort
+        sort = { "variants.price": 1, createdAt: -1 };
+        break;
+      case "newArrivals":
+        query = { ...query };
+        sort = { createdAt: -1 };
+        break;
+      default:
+        sort = { createdAt: -1 };
+    }
+
+    const products = await Product.find(query)
+      .populate("categoryId", "name slug")
+      .populate("brandId", "name slug")
+      .sort(sort)
+      .limit(limit)
+      .lean();
+
+    return JSON.parse(JSON.stringify(products));
+  },
+  ["featured-products"],
+  { 
+    tags: ["products", "featured-products"],
+    revalidate: 3600 // Revalidate every hour
+  }
+);
+
+export async function getFeaturedProducts(
+  options?: GetFeaturedProductsOptions
+): Promise<IProduct[]> {
+  return getCachedFeaturedProducts(options);
+}
+
+================
 File: src/features/product/queries/get-product-by-id.ts
 ================
 import { dbConnect } from "@/lib/db/dbConnect";
@@ -8306,37 +9407,6 @@ export type ProductFormValues = {
 };
 
 ================
-File: src/features/product/validation.ts
-================
-import { z } from "zod";
-
-export const variantSchema = z.object({
-  sku: z.string().min(1, "SKU is required").toUpperCase(),
-  attributes: z.record(z.string(), z.string()).default({}),
-  price: z.coerce.number().min(0, "Price must be non-negative"),
-  discountPrice: z.coerce.number().min(0).optional(),
-  stock: z.coerce.number().int().min(0, "Stock must be 0 or higher"),
-  images: z.array(z.string()).default([]),
-});
-
-export const productSchema = z.object({
-  name: z.string().min(2, "Product name must be at least 2 characters"),
-  slug: z.string().optional(),
-  description: z.string().optional(),
-  categoryId: z.string().min(1, "Category is required"),
-  brandId: z.string().min(1, "Brand is required"),
-  status: z.enum(["active", "inactive"]).default("active"),
-  isFeatured: z.coerce.boolean().default(false),
-  images: z.array(z.string()).default([]),
-  imagePublicIds: z.array(z.string()).default([]),
-  variants: z
-    .array(variantSchema)
-    .min(1, "At least one product variant is required"),
-});
-
-export type ProductInput = z.infer<typeof productSchema>;
-
-================
 File: src/hooks/use-mobile.ts
 ================
 import * as React from "react"
@@ -8344,19 +9414,15 @@ import * as React from "react"
 const MOBILE_BREAKPOINT = 768
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-
-  return !!isMobile
+  return React.useSyncExternalStore(
+    (onStoreChange) => {
+      const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+      mql.addEventListener("change", onStoreChange)
+      return () => mql.removeEventListener("change", onStoreChange)
+    },
+    () => window.innerWidth < MOBILE_BREAKPOINT,
+    () => false,
+  )
 }
 
 ================
@@ -9073,7 +10139,7 @@ File: src/components/admin/AppSidebar.tsx
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Layers, Tag, Package, Ticket , Image } from "lucide-react";
+import { LayoutDashboard, Layers, Tag, Package, Ticket , Image, Mail } from "lucide-react";
 
 import {
   Sidebar,
@@ -9095,6 +10161,7 @@ const navItems = [
   { label: "Products", href: "/admin/products", icon: Package },
   { label: "Coupons", href: "/admin/coupons", icon: Ticket },
   { label: "Hero Banner", href: "/admin/hero-banners", icon: Image },
+  { label: "Subscribers", href: "/admin/subscribers", icon: Mail },
 ];
 
 export default function AppSidebar() {
@@ -9623,6 +10690,107 @@ export async function deleteHeroBanner(id: string) {
 }
 
 ================
+File: src/features/hero/components/HeroBannerSection.tsx
+================
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Copy, Check, ArrowRight, Tag } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+export type HeroBannerData = {
+  _id: string;
+  title: string;
+  subtitle?: string;
+  ctaText: string;
+  ctaLink: string;
+  badgeText?: string;
+  couponCode?: string;
+  imageUrl: string;
+};
+
+export function HeroBannerSection({ banner }: { banner: HeroBannerData }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!banner.couponCode) return;
+    navigator.clipboard.writeText(banner.couponCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <section className="relative overflow-hidden rounded-3xl bg-card border shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center p-8 lg:p-12">
+        
+        {/* Left Content */}
+        <div className="lg:col-span-7 space-y-6 ">
+          {banner.badgeText && (
+            <Badge variant="secondary" className="px-3 py-1 text-xs font-semibold uppercase tracking-wider">
+              {banner.badgeText}
+            </Badge>
+          )}
+
+          <h1 className="text-4xl  sm:text-5xl font-extrabold tracking-tight text-foreground leading-tight">
+            {banner.title}
+          </h1>
+
+          {banner.subtitle && (
+            <p className="text-lg text-muted-foreground max-w-xl">
+              {banner.subtitle}
+            </p>
+          )}
+
+          {/* Optional Coupon Code Box */}
+          {banner.couponCode && (
+            <div className="inline-flex items-center gap-3 p-2 pr-4 bg-muted/60 border rounded-xl">
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-background rounded-lg text-sm font-mono font-bold text-primary border">
+                <Tag className="h-3.5 w-3.5" />
+                {banner.couponCode}
+              </div>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={handleCopy}
+                className="gap-1 text-xs"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? "Copied" : "Copy Code"}
+              </Button>
+            </div>
+          )}
+
+          {/* Call to Action */}
+          <div className="">
+            <Button size="lg" className="rounded-xl gap-2 font-medium shadow-md" >
+              <Link href={banner.ctaLink} className="flex  justify-center items-center gap-3 rounded-sm!">
+                {banner.ctaText}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Right Image Display */}
+        <div className="lg:col-span-5 relative aspect-4/3 w-full rounded-2xl overflow-hidden bg-muted">
+          <Image
+            src={banner.imageUrl}
+            alt={banner.title}
+            fill
+            priority
+            className="object-cover"
+          />
+        </div>
+
+      </div>
+    </section>
+  );
+}
+
+================
 File: src/features/hero/queries/get-hero-banners.ts
 ================
 import "server-only";
@@ -9645,6 +10813,789 @@ const getCachedActiveHeroBanners = unstable_cache(
 export async function getActiveHeroBanners() {
   return getCachedActiveHeroBanners();
 }
+
+================
+File: src/features/product/components/ProductForm.tsx
+================
+// src/features/product/components/ProductForm.tsx
+// Add this section in the form where you have status and other fields
+
+"use client";
+
+import { useState, useTransition, useRef } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Loader2,
+  AlertCircle,
+  Plus,
+  Trash2,
+  Upload,
+  X,
+  Layers,
+  Star,
+} from "lucide-react";
+
+import { createProduct } from "../actions/create-product";
+import { updateProduct } from "../actions/update-product";
+import type { IProduct } from "../types";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { uploadImagesToCloudinary } from "../actions/upload-images";
+
+type CategoryOrBrandOption = {
+  _id: string;
+  name: string;
+};
+
+type Props = {
+  mode: "create" | "edit";
+  product?: IProduct;
+  categories: CategoryOrBrandOption[];
+  brands: CategoryOrBrandOption[];
+};
+
+type FormVariant = {
+  _id?: string;
+  sku: string;
+  price: number;
+  discountPrice?: number;
+  stock: number;
+  attributes: { key: string; value: string }[];
+};
+
+export function ProductForm({ mode, product, categories, brands }: Props) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  // Category and Brand selects
+  const [categoryId, setCategoryId] = useState<string>(
+    typeof product?.categoryId === "object"
+      ? String(product.categoryId._id)
+      : String(product?.categoryId || ""),
+  );
+  const [brandId, setBrandId] = useState<string>(
+    typeof product?.brandId === "object"
+      ? String(product.brandId._id)
+      : String(product?.brandId || ""),
+  );
+  const [status, setStatus] = useState<"active" | "inactive">(
+    product?.status ?? "active",
+  );
+  
+  // NEW: Add isFeatured state
+  const [isFeatured, setIsFeatured] = useState<boolean>(
+    product?.isFeatured ?? false,
+  );
+
+  // 1. Existing Cloudinary Images & Public IDs State
+  const [existingImages, setExistingImages] = useState<string[]>(
+    product?.images || [],
+  );
+  const [existingPublicIds, setExistingPublicIds] = useState<string[]>(
+    product?.imagePublicIds || [],
+  );
+
+  // 2. New File Upload Previews
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [newFilePreviews, setNewFilePreviews] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 3. Dynamic Variants State
+  const [variants, setVariants] = useState<FormVariant[]>(() => {
+    if (product?.variants && product.variants.length > 0) {
+      return product.variants.map((v) => ({
+        _id: v._id,
+        sku: v.sku,
+        price: v.price,
+        discountPrice: v.discountPrice,
+        stock: v.stock,
+        attributes: v.attributes
+          ? Object.entries(v.attributes).map(([key, value]) => ({ key, value }))
+          : [],
+      }));
+    }
+    return [
+      {
+        sku: "",
+        price: 0,
+        stock: 0,
+        attributes: [{ key: "color", value: "Black" }],
+      },
+    ];
+  });
+
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  }
+
+  // Handle New File Selection
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    // Validate size (< 5MB each)
+    const validFiles = files.filter((f) => f.size <= 5 * 1024 * 1024);
+    if (validFiles.length < files.length) {
+      setFormError("Some images exceeded the 5MB file limit and were skipped.");
+    }
+
+    const updatedFiles = [...newFiles, ...validFiles];
+    setNewFiles(updatedFiles);
+
+    const updatedPreviews = [
+      ...newFilePreviews,
+      ...validFiles.map((file) => URL.createObjectURL(file)),
+    ];
+    setNewFilePreviews(updatedPreviews);
+  }
+
+  // Remove individual Existing Image
+  function removeExistingImage(index: number) {
+    setExistingImages((prev) => prev.filter((_, i) => i !== index));
+    setExistingPublicIds((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // Remove individual New Unsaved File
+  function removeNewFile(index: number) {
+    URL.revokeObjectURL(newFilePreviews[index]);
+    setNewFiles((prev) => prev.filter((_, i) => i !== index));
+    setNewFilePreviews((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // Variant Helpers
+  function addVariant() {
+    setVariants((prev) => [
+      ...prev,
+      {
+        sku: "",
+        price: 0,
+        stock: 0,
+        attributes: [{ key: "", value: "" }],
+      },
+    ]);
+  }
+
+  function removeVariant(index: number) {
+    if (variants.length <= 1) {
+      setFormError("At least one variant is required.");
+      return;
+    }
+    setVariants((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateVariantField(
+    index: number,
+    field: keyof FormVariant,
+    val: unknown,
+  ) {
+    setVariants((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: val };
+      return updated;
+    });
+  }
+
+  function addAttribute(variantIndex: number) {
+    setVariants((prev) => {
+      const updated = [...prev];
+      updated[variantIndex].attributes.push({ key: "", value: "" });
+      return updated;
+    });
+  }
+
+  function removeAttribute(variantIndex: number, attrIndex: number) {
+    setVariants((prev) => {
+      const updated = [...prev];
+      updated[variantIndex].attributes = updated[
+        variantIndex
+      ].attributes.filter((_, i) => i !== attrIndex);
+      return updated;
+    });
+  }
+
+  function updateAttribute(
+    variantIndex: number,
+    attrIndex: number,
+    keyOrValue: "key" | "value",
+    val: string,
+  ) {
+    setVariants((prev) => {
+      const updated = [...prev];
+      updated[variantIndex].attributes[attrIndex][keyOrValue] = val;
+      return updated;
+    });
+  }
+
+  // Submit Handler
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setFormError(null);
+    setFieldErrors({});
+
+    if (!categoryId) return setFormError("Please select a category.");
+    if (!brandId) return setFormError("Please select a brand.");
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    startTransition(async () => {
+      try {
+        const finalImages = [...existingImages];
+        const finalPublicIds = [...existingPublicIds];
+
+        // Upload new selected files if any exist
+        if (newFiles.length > 0) {
+          const base64Files = await Promise.all(newFiles.map(fileToBase64));
+          const uploaded = await uploadImagesToCloudinary(base64Files);
+
+          uploaded.forEach((img) => {
+            finalImages.push(img.url);
+            finalPublicIds.push(img.publicId);
+          });
+        }
+
+        // Format Variants
+        const formattedVariants = variants.map((v) => {
+          const attributesRecord: Record<string, string> = {};
+          v.attributes.forEach((attr) => {
+            if (attr.key.trim() && attr.value.trim()) {
+              attributesRecord[attr.key.trim().toLowerCase()] = attr.value.trim();
+            }
+          });
+
+          return {
+            _id: v._id,
+            sku: v.sku.trim().toUpperCase(),
+            price: Number(v.price),
+            discountPrice: v.discountPrice ? Number(v.discountPrice) : undefined,
+            stock: Number(v.stock),
+            attributes: attributesRecord,
+          };
+        });
+
+        // Construct Payload with populated Cloudinary array data
+        const payload = {
+          name: formData.get("name") as string,
+          slug: formData.get("slug") as string,
+          description: formData.get("description") as string,
+          categoryId,
+          brandId,
+          status,
+          isFeatured, // NEW: Include isFeatured in payload
+          images: finalImages,
+          imagePublicIds: finalPublicIds,
+          variants: formattedVariants,
+        };
+
+        const action =
+          mode === "create"
+            ? createProduct(payload)
+            : updateProduct(product!._id, payload);
+
+        const result = await action;
+
+        if (!result.success) {
+          setFormError(result.message);
+          setFieldErrors(result.fieldErrors || {});
+          return;
+        }
+
+        router.push("/admin/products");
+        router.refresh();
+      } catch (err: unknown) {
+        setFormError(
+          err instanceof Error ? err.message : "Failed to process image uploads."
+        );
+      }
+    });
+  }
+
+  return (
+    <Card className="max-w-5xl mx-auto">
+      <form onSubmit={handleSubmit}>
+        <CardHeader>
+          <CardTitle>
+            {mode === "create" ? "Add Product" : "Edit Product"}
+          </CardTitle>
+          <CardDescription>
+            Manage basic details, image gallery, and inventory variants.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {formError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Basic Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Product Name *</Label>
+              <Input
+                id="name"
+                name="name"
+                defaultValue={product?.name}
+                required
+                placeholder="e.g. Mechanical Gaming Keyboard"
+              />
+              {fieldErrors.name?.[0] && (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.name[0]}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="slug">
+                Slug{" "}
+                <span className="text-xs text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="slug"
+                name="slug"
+                defaultValue={product?.slug}
+                placeholder="auto-generated-if-blank"
+              />
+              {fieldErrors.slug?.[0] && (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.slug[0]}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Category, Brand, Status, and Featured */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label>Category *</Label>
+              <Select
+                value={categoryId}
+                onValueChange={(value) => {
+                  if (value !== null) setCategoryId(value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Brand *</Label>
+              <Select
+                value={brandId}
+                onValueChange={(value) => {
+                  if (value !== null) setBrandId(value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Brand" />
+                </SelectTrigger>
+                <SelectContent>
+                  {brands.map((b) => (
+                    <SelectItem key={b._id} value={b._id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={status}
+                onValueChange={(v) => setStatus(v as "active" | "inactive")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* NEW: Featured Toggle */}
+            <div className="space-y-2">
+              <Label>Featured Product</Label>
+              <div className="flex h-8 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsFeatured(!isFeatured)}
+                  className={`
+                    relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                    ${isFeatured ? 'bg-primary' : 'bg-muted'}
+                  `}
+                >
+                  <span
+                    className={`
+                      inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                      ${isFeatured ? 'translate-x-6' : 'translate-x-1'}
+                    `}
+                  />
+                </button>
+                <div className="flex items-center gap-2">
+                  <Star className={`
+                    h-4 w-4 transition-colors
+                    ${isFeatured ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}
+                  `} />
+                  <span className="text-xs text-muted-foreground">
+                    {isFeatured ? 'Featured' : 'Not Featured'}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Featured products appear on the homepage
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              name="description"
+              defaultValue={product?.description}
+              rows={4}
+              placeholder="Detailed product features..."
+            />
+          </div>
+
+          {/* Product Gallery Section */}
+          <div className="space-y-3 pt-4 border-t">
+            <div>
+              <Label className="text-base font-semibold">Product Gallery</Label>
+              <p className="text-xs text-muted-foreground">
+                Upload image assets or manage existing Cloudinary images.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+              {/* Existing Images */}
+              {existingImages.map((src, index) => (
+                <div
+                  key={src}
+                  className="relative aspect-square rounded-md border overflow-hidden bg-muted group"
+                >
+                  <Image
+                    src={src}
+                    alt="Gallery item"
+                    fill
+                    className="object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeExistingImage(index)}
+                    className="absolute top-1 right-1 bg-destructive/80 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+
+              {/* New Selected Files Previews */}
+              {newFilePreviews.map((src, index) => (
+                <div
+                  key={src}
+                  className="relative aspect-square rounded-md border border-dashed border-primary overflow-hidden bg-muted group"
+                >
+                  <Image
+                    src={src}
+                    alt="New upload"
+                    fill
+                    className="object-cover"
+                  />
+                  <Badge className="absolute bottom-1 left-1 text-[9px] px-1 py-0">
+                    New
+                  </Badge>
+                  <button
+                    type="button"
+                    onClick={() => removeNewFile(index)}
+                    className="absolute top-1 right-1 bg-destructive/80 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+
+              {/* Upload Trigger Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="aspect-square flex flex-col items-center justify-center border-2 border-dashed rounded-md text-muted-foreground hover:border-primary hover:text-primary transition-colors bg-card"
+              >
+                <Upload className="h-5 w-5 mb-1" />
+                <span className="text-xs font-medium">Add Image</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+            </div>
+          </div>
+
+          {/* Variants Section */}
+          <div className="space-y-4 pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-base font-semibold flex items-center gap-2">
+                  <Layers className="h-4 w-4" /> Product Variants *
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Define SKUs, prices, stock levels, and custom attributes.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addVariant}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Add Variant
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {variants.map((variant, vIdx) => (
+                <div
+                  key={variant._id || vIdx}
+                  className="p-4 border rounded-lg bg-card space-y-4 relative"
+                >
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Variant #{vIdx + 1}
+                    </span>
+                    {variants.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-destructive hover:text-destructive"
+                        onClick={() => removeVariant(vIdx)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div>
+                      <Label className="text-xs">SKU *</Label>
+                      <Input
+                        value={variant.sku}
+                        onChange={(e) =>
+                          updateVariantField(vIdx, "sku", e.target.value)
+                        }
+                        placeholder="e.g. KBD-BLK-01"
+                        className="font-mono text-xs uppercase"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Price ($) *</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={variant.price}
+                        onChange={(e) =>
+                          updateVariantField(vIdx, "price", e.target.value)
+                        }
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Discount Price ($)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={variant.discountPrice || ""}
+                        onChange={(e) =>
+                          updateVariantField(
+                            vIdx,
+                            "discountPrice",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Optional"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Stock Quantity *</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={variant.stock}
+                        onChange={(e) =>
+                          updateVariantField(vIdx, "stock", e.target.value)
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Attributes (e.g., Color, Size) */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">
+                        Custom Attributes (e.g., Color, Size, RAM)
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => addAttribute(vIdx)}
+                        className="text-xs text-primary hover:underline font-medium"
+                      >
+                        + Add Attribute
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {variant.attributes.map((attr, aIdx) => (
+                        <div key={aIdx} className="flex items-center gap-2">
+                          <Input
+                            placeholder="Key (e.g. color)"
+                            value={attr.key}
+                            onChange={(e) =>
+                              updateAttribute(vIdx, aIdx, "key", e.target.value)
+                            }
+                            className="h-8 text-xs"
+                          />
+                          <Input
+                            placeholder="Value (e.g. Red)"
+                            value={attr.value}
+                            onChange={(e) =>
+                              updateAttribute(
+                                vIdx,
+                                aIdx,
+                                "value",
+                                e.target.value,
+                              )
+                            }
+                            className="h-8 text-xs"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => removeAttribute(vIdx, aIdx)}
+                          >
+                            <X className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+
+        <CardFooter className="flex justify-end gap-2 border-t pt-4">
+          <Link href="/admin/products">
+            <Button type="button" variant="outline" disabled={isPending}>
+              Cancel
+            </Button>
+          </Link>
+          <Button type="submit" disabled={isPending}>
+            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isPending
+              ? "Saving..."
+              : mode === "create"
+                ? "Create Product"
+                : "Save Changes"}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+================
+File: src/features/product/validation.ts
+================
+// src/features/product/validation.ts
+import { z } from "zod";
+
+export const variantSchema = z.object({
+  sku: z.string().min(1, "SKU is required").toUpperCase(),
+  attributes: z.record(z.string(), z.string()).default({}),
+  price: z.coerce.number().min(0, "Price must be non-negative"),
+  discountPrice: z.coerce.number().min(0).optional(),
+  stock: z.coerce.number().int().min(0, "Stock must be 0 or higher"),
+  images: z.array(z.string()).default([]),
+});
+
+export const productSchema = z.object({
+  name: z.string().min(2, "Product name must be at least 2 characters"),
+  slug: z.string().optional(),
+  description: z.string().optional(),
+  categoryId: z.string().min(1, "Category is required"),
+  brandId: z.string().min(1, "Brand is required"),
+  status: z.enum(["active", "inactive"]).default("active"),
+  isFeatured: z.boolean().default(false), // Make sure this is properly defined
+  images: z.array(z.string()).default([]),
+  imagePublicIds: z.array(z.string()).default([]),
+  variants: z
+    .array(variantSchema)
+    .min(1, "At least one product variant is required"),
+});
+
+export type ProductInput = z.infer<typeof productSchema>;
 
 ================
 File: src/lib/action-result.ts
@@ -10087,6 +12038,127 @@ File: tsconfig.json
     "**/*.mts"
   ],
   "exclude": ["node_modules"]
+}
+
+================
+File: src/app/(shop)/products/featured/page.tsx
+================
+// src/app/admin/products/featured/page.tsx
+import { getProducts } from "@/features/product/queries/get-products";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Star, StarOff } from "lucide-react";
+import { toggleProductFeaturedForm } from "@/features/product/actions/toggle-featured";
+
+export default async function FeaturedProductsPage() {
+  const { products } = await getProducts({ limit: 100 });
+ 
+  const featuredProducts = products.filter((p : { isFeatured: boolean }) => p.isFeatured);
+  const nonFeaturedProducts = products.filter((p : { isFeatured: boolean }) => !p.isFeatured);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Featured Products</h1>
+        <p className="text-sm text-muted-foreground">
+          Manage which products appear on the homepage
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Featured Products */}
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-primary/10 p-3 border-b">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+              Featured Products ({featuredProducts.length})
+            </h2>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {featuredProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                    No featured products yet
+                  </TableCell>
+                </TableRow>
+              ) : (
+                featuredProducts.map((product: { _id: string; name: string }) => (
+                  <TableRow key={product._id}>
+                    <TableCell>{product.name}</TableCell>
+                    <TableCell className="text-right">
+                      <form action={toggleProductFeaturedForm}>
+                        <input type="hidden" name="productId" value={product._id} />
+                        <input type="hidden" name="featured" value="false" />
+                        <Button variant="ghost" size="sm" type="submit">
+                          <StarOff className="h-4 w-4" />
+                        </Button>
+                      </form>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Non-Featured Products */}
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-muted/30 p-3 border-b">
+            <h2 className="font-semibold flex items-center gap-2">
+              <StarOff className="h-4 w-4 text-muted-foreground" />
+              Available Products ({nonFeaturedProducts.length})
+            </h2>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {nonFeaturedProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                    All products are featured
+                  </TableCell>
+                </TableRow>
+              ) : (
+                nonFeaturedProducts.map((product: { _id: string; name: string }) => (
+                  <TableRow key={product._id}>
+                    <TableCell>{product.name}</TableCell>
+                    <TableCell className="text-right">
+                      <form action={toggleProductFeaturedForm}>
+                        <input type="hidden" name="productId" value={product._id} />
+                        <input type="hidden" name="featured" value="true" />
+                        <Button variant="outline" size="sm" type="submit">
+                          <Star className="h-4 w-4" />
+                        </Button>
+                      </form>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 ================
@@ -10728,27 +12800,65 @@ export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 
 ================
-File: src/app/(marketing)/page.tsx
+File: src/features/product/actions/toggle-featured.ts
 ================
-import { getActiveHeroBanners } from "@/features/hero/queries/get-hero-banners";
-import { HeroBannerSection } from "@/features/hero/components/HeroBannerSection";
-import { getFeaturedCategories } from "@/features/category/queries/get-featured-categories";
-import { CategoryGridSection } from "@/features/category/components/CategoryGridSection";
+// src/features/product/actions/toggle-featured.ts
+"use server";
 
-export default async function MarketingPage() {
-  const [banners, categories] = await Promise.all([
-    getActiveHeroBanners(),
-    getFeaturedCategories(),
-  ]);
+import { revalidatePath, revalidateTag } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Product } from "@/models/Product";
+import { requireAdmin } from "@/lib/auth";
+import { ActionResult } from "@/lib/action-result";
 
-  const primaryBanner = banners[0];
+export async function toggleProductFeatured(formData: FormData): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { success: false, message: "Admin access required" };
+  }
 
-  return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-12">
-      {primaryBanner && <HeroBannerSection banner={primaryBanner} />}
-      <CategoryGridSection categories={categories} />
-    </main>
-  );
+  const productId = formData.get("productId")?.toString();
+  const featured = formData.get("featured") === "true";
+
+  if (!productId) {
+    return { success: false, message: "Product ID is required" };
+  }
+
+  try {
+    await dbConnect();
+
+    const product = await Product.findByIdAndUpdate(
+      productId,
+      { isFeatured: featured },
+      { new: true }
+    );
+
+    if (!product) {
+      return { success: false, message: "Product not found" };
+    }
+
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/products/featured");
+    revalidatePath("/");
+    revalidateTag("products", "max");
+    revalidateTag("featured-products", "max");
+
+    return { 
+      success: true, 
+      message: `Product ${featured ? 'featured' : 'unfeatured'} successfully` 
+    };
+  } catch (error) {
+    console.error("Error toggling featured status:", error);
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : "Failed to update product" 
+    };
+  }
+}
+
+export async function toggleProductFeaturedForm(formData: FormData): Promise<void> {
+  await toggleProductFeatured(formData);
 }
 
 ================
@@ -10837,6 +12947,65 @@ export function CategoryTable({ categories }: { categories: CategoryDTO[] }) {
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+================
+File: src/app/(marketing)/page.tsx
+================
+// src/app/(marketing)/page.tsx
+import { getActiveHeroBanners } from "@/features/hero/queries/get-hero-banners";
+import { HeroBannerSection } from "@/features/hero/components/HeroBannerSection";
+import { getFeaturedCategories } from "@/features/category/queries/get-featured-categories";
+import { CategoryGridSection } from "@/features/category/components/CategoryGridSection";
+import { getActiveBrands } from "@/features/brand/queries/get-active-brands";
+import { BrandStrip } from "@/features/brand/components/BrandStrip";
+import { getFeaturedProducts } from "@/features/product/queries/get-featured-products";
+import { FeaturedProductsSection } from "@/features/product/components/FeaturedProductsSection";
+import { NewsletterSection } from "@/features/newsletter/components/NewsletterSection";
+import { TrustSignals } from "@/features/trust/components/TrustSignals";
+
+export default async function MarketingPage() {
+  const [banners, categories, brands, featuredProducts, bestSellingProducts, newArrivals] =
+    await Promise.all([
+      getActiveHeroBanners(),
+      getFeaturedCategories(),
+      getActiveBrands(12),
+      getFeaturedProducts({ limit: 8, type: "featured" }),
+      getFeaturedProducts({ limit: 8, type: "bestSelling" }),
+      getFeaturedProducts({ limit: 8, type: "newArrivals" }),
+    ]);
+
+  const primaryBanner = banners[0];
+
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-12">
+      {/* Hero Banner */}
+      {primaryBanner && <HeroBannerSection banner={primaryBanner} />}
+
+      {/* Trust Signals - NEW */}
+      <TrustSignals variant="row" />
+
+      {/* Category Grid */}
+      <CategoryGridSection categories={categories} />
+
+      {/* Featured Products Section */}
+      <FeaturedProductsSection
+        featuredProducts={featuredProducts}
+        bestSellingProducts={bestSellingProducts}
+        newArrivals={newArrivals}
+      />
+
+      {/* Brand Strip */}
+      <BrandStrip
+        brands={brands}
+        title="Trusted Brands"
+        subtitle="Shop from industry-leading brands you know and love"
+      />
+
+      {/* Newsletter Section - NEW */}
+      <NewsletterSection source="homepage" />
+    </main>
   );
 }
 
@@ -11231,20 +13400,25 @@ File: package.json
     "@base-ui/react": "^1.7.0",
     "@clerk/nextjs": "^7.8.0",
     "@hookform/resolvers": "^5.9.1",
+    "@sendgrid/mail": "^8.1.6",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.10.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^13.1.1",
     "lucide-react": "^1.33.0",
+    "mailchimp-api-v3": "^1.15.0",
     "markdown-it": "^15.0.0",
     "mongoose": "^9.9.3",
     "next": "16.3.2",
     "next-themes": "^0.4.6",
+    "nodemailer": "^9.0.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.86.0",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
+    "resend": "^6.24.0",
     "server-only": "^0.0.1",
     "shadcn": "^4.19.0",
     "sonner": "^2.0.8",
@@ -11255,6 +13429,7 @@ File: package.json
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",

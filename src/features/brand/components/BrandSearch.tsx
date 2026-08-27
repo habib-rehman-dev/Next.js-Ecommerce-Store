@@ -72,7 +72,7 @@ export function BrandSearch({ brands }: BrandSearchProps) {
               onClick={() => clearSearch()}
             >
               {brand.logo ? (
-                <div className="relative h-8 w-8 flex-shrink-0">
+                <div className="relative h-8 w-8 shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={brand.logo}
@@ -81,7 +81,7 @@ export function BrandSearch({ brands }: BrandSearchProps) {
                   />
                 </div>
               ) : (
-                <div className="h-8 w-8 flex-shrink-0 bg-muted rounded-md flex items-center justify-center">
+                <div className="h-8 w-8 shrink-0 bg-muted rounded-md flex items-center justify-center">
                   <Search className="h-4 w-4 text-muted-foreground" />
                 </div>
               )}
