@@ -34,14 +34,14 @@ export function HeroBannerSection({ banner }: { banner: HeroBannerData }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center p-8 lg:p-12">
         
         {/* Left Content */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-6 ">
           {banner.badgeText && (
             <Badge variant="secondary" className="px-3 py-1 text-xs font-semibold uppercase tracking-wider">
               {banner.badgeText}
             </Badge>
           )}
 
-          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground leading-tight">
+          <h1 className="text-4xl  sm:text-5xl font-extrabold tracking-tight text-foreground leading-tight">
             {banner.title}
           </h1>
 
@@ -71,9 +71,9 @@ export function HeroBannerSection({ banner }: { banner: HeroBannerData }) {
           )}
 
           {/* Call to Action */}
-          <div>
+          <div className="">
             <Button size="lg" className="rounded-xl gap-2 font-medium shadow-md" >
-              <Link href={banner.ctaLink}>
+              <Link href={banner.ctaLink} className="flex  justify-center items-center gap-3 rounded-sm!">
                 {banner.ctaText}
                 <ArrowRight className="h-4 w-4" />
               </Link>

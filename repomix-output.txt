@@ -251,175 +251,6 @@ Files
 ================================================================
 
 ================
-File: src/app/(marketing)/layout.tsx
-================
-export default function MarketingLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="w-full border rounded-lg p-5">
-      {children}
-    </div>
-  );
-}
-
-================
-File: src/features/category/components/CategoryGridSection.tsx
-================
-import Image from "next/image";
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import type { CategoryDTO } from "../types";
-
-type Props = {
-  categories: CategoryDTO[];
-};
-
-export function CategoryGridSection({ categories }: Props) {
-  if (!categories || categories.length === 0) return null;
-
-  return (
-    <section className="space-y-6">
-      <div className="flex items-end justify-between border-b pb-4">
-        <div>
-          <Badge variant="outline" className="mb-2">
-            Categories
-          </Badge>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Shop by Category
-          </h2>
-        </div>
-        <Button
-          variant="ghost"
-          nativeButton={false}
-          render={<Link href="/products" />}
-          className="gap-1 text-sm font-medium"
-        >
-          View All <ArrowUpRight className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-        {categories.map((category) => (
-          <Link
-            key={category.id}
-            href={`/products?categoryId=${category.id}`}
-            className="group block focus:outline-none"
-          >
-            <Card className="overflow-hidden border bg-card transition-all duration-300 hover:shadow-lg hover:border-primary/50">
-              <CardContent className="p-0">
-                <div className="relative aspect-4/3 w-full overflow-hidden bg-muted">
-                  {category.image ? (
-                    <Image
-                      src={category.image}
-                      alt={category.name}
-                      fill
-                      sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
-                      No image
-                    </div>
-                  )}
-
-                  <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
-
-                  <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                    <h3 className="font-semibold text-base sm:text-lg tracking-tight group-hover:underline underline-offset-4">
-                      {category.name}
-                    </h3>
-                    {category.description && (
-                      <p className="text-xs text-zinc-300 line-clamp-1 mt-0.5">
-                        {category.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-================
-File: src/features/category/queries/get-featured-categories.ts
-================
-import "server-only";
-import { unstable_cache } from "next/cache";
-import { dbConnect } from "@/lib/db/dbConnect";
-import { Category } from "@/models/Category";
-import type { CategoryDTO } from "../types";
-
-function toDTO(c: {
-  _id: { toString(): string };
-  name: string;
-  slug: string;
-  description?: string;
-  image?: string;
-  parentCategoryId: { toString(): string } | null;
-  status: "active" | "inactive";
-  isFeatured?: boolean;
-  sortOrder: number;
-  createdAt: Date;
-  updatedAt: Date;
-}): CategoryDTO {
-  return {
-    id: c._id.toString(),
-    name: c.name,
-    slug: c.slug,
-    description: c.description,
-    image: c.image,
-    parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
-    status: c.status,
-    isFeatured: c.isFeatured ?? false,
-    sortOrder: c.sortOrder,
-    createdAt: c.createdAt.toISOString(),
-    updatedAt: c.updatedAt.toISOString(),
-  };
-}
-
-const getCachedFeaturedCategories = unstable_cache(
-  async (limit: number): Promise<CategoryDTO[]> => {
-    await dbConnect();
-
-    const featured = await Category.find({ isFeatured: true, status: "active" })
-      .sort({ sortOrder: 1, name: 1 })
-      .limit(limit)
-      .lean();
-
-    if (featured.length > 0) {
-      return featured.map(toDTO);
-    }
-
-    const fallback = await Category.find({ status: "active" })
-      .sort({ sortOrder: 1, name: 1 })
-      .limit(limit)
-      .lean();
-
-    return fallback.map(toDTO);
-  },
-  ["featured-categories"],
-  { tags: ["categories"] },
-);
-
-/**
- * Categories for the storefront homepage grid. Cached and revalidated
- * via the "categories" tag whenever a category is created/updated/deleted.
- */
-export async function getFeaturedCategories(limit = 8): Promise<CategoryDTO[]> {
-  return getCachedFeaturedCategories(limit);
-}
-
-================
 File: .repomix/bundles.json
 ================
 {
@@ -501,6 +332,21 @@ export const page = () => {
 };
 
 export default page
+
+================
+File: src/app/(marketing)/layout.tsx
+================
+export default function MarketingLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="w-full border rounded-lg p-5">
+      {children}
+    </div>
+  );
+}
 
 ================
 File: src/app/admin/brands/[id]/edit/page.tsx
@@ -5711,6 +5557,91 @@ export type CreateBrandInput = z.infer<typeof createBrandSchema>;
 export type UpdateBrandInput = z.infer<typeof updateBrandSchema>;
 
 ================
+File: src/features/category/components/CategoryGridSection.tsx
+================
+import Image from "next/image";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import type { CategoryDTO } from "../types";
+
+type Props = {
+  categories: CategoryDTO[];
+};
+
+export function CategoryGridSection({ categories }: Props) {
+  if (!categories || categories.length === 0) return null;
+
+  return (
+    <section className="space-y-6">
+      <div className="flex items-end justify-between border-b pb-4">
+        <div>
+          <Badge variant="outline" className="mb-2">
+            Categories
+          </Badge>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            Shop by Category
+          </h2>
+        </div>
+        <Button
+          variant="ghost"
+          nativeButton={false}
+          render={<Link href="/products" />}
+          className="gap-1 text-sm font-medium"
+        >
+          View All <ArrowUpRight className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+        {categories.map((category) => (
+          <Link
+            key={category.id}
+            href={`/products?categoryId=${category.id}`}
+            className="group block focus:outline-none"
+          >
+            <Card className="overflow-hidden border bg-card transition-all duration-300 hover:shadow-lg hover:border-primary/50">
+              <CardContent className="p-0">
+                <div className="relative aspect-4/3 w-full overflow-hidden bg-muted">
+                  {category.image ? (
+                    <Image
+                      src={category.image}
+                      alt={category.name}
+                      fill
+                      sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
+                      No image
+                    </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+
+                  <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                    <h3 className="font-semibold text-base sm:text-lg tracking-tight group-hover:underline underline-offset-4">
+                      {category.name}
+                    </h3>
+                    {category.description && (
+                      <p className="text-xs text-zinc-300 line-clamp-1 mt-0.5">
+                        {category.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+================
 File: src/features/category/components/CategoryRowActions.tsx
 ================
 "use client";
@@ -5757,50 +5688,27 @@ export function CategoryRowActions({ id, name }: { id: string; name: string }) {
 }
 
 ================
-File: src/features/category/queries/get-categories.ts
+File: src/features/category/queries/get-featured-categories.ts
 ================
 import "server-only";
-
+import { unstable_cache } from "next/cache";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { Category } from "@/models/Category";
 import type { CategoryDTO } from "../types";
 
-export async function getCategories(): Promise<CategoryDTO[]> {
-  await dbConnect();
-
-  const categories = await Category.find()
-    .sort({ sortOrder: 1, name: 1 })
-    .lean();
-
-  return categories.map((c) => ({
-    id: c._id.toString(),
-    name: c.name,
-    slug: c.slug,
-    description: c.description,
-    image: c.image,
-    parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
-    status: c.status,
-    isFeatured: c.isFeatured ?? false,
-    sortOrder: c.sortOrder,
-    createdAt: c.createdAt.toISOString(),
-    updatedAt: c.updatedAt.toISOString(),
-  }));
-}
-
-================
-File: src/features/category/queries/get-category-by-id.ts
-================
-import "server-only";
-import { dbConnect } from "@/lib/db/dbConnect";
-import { Category } from "@/models/Category";
-import type { CategoryDTO } from "../types";
-
-export async function getCategoryById(id: string): Promise<CategoryDTO | null> {
-  await dbConnect();
-
-  const c = await Category.findById(id).lean();
-  if (!c) return null;
-
+function toDTO(c: {
+  _id: { toString(): string };
+  name: string;
+  slug: string;
+  description?: string;
+  image?: string;
+  parentCategoryId: { toString(): string } | null;
+  status: "active" | "inactive";
+  isFeatured?: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): CategoryDTO {
   return {
     id: c._id.toString(),
     name: c.name,
@@ -5814,6 +5722,38 @@ export async function getCategoryById(id: string): Promise<CategoryDTO | null> {
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   };
+}
+
+const getCachedFeaturedCategories = unstable_cache(
+  async (limit: number): Promise<CategoryDTO[]> => {
+    await dbConnect();
+
+    const featured = await Category.find({ isFeatured: true, status: "active" })
+      .sort({ sortOrder: 1, name: 1 })
+      .limit(limit)
+      .lean();
+
+    if (featured.length > 0) {
+      return featured.map(toDTO);
+    }
+
+    const fallback = await Category.find({ status: "active" })
+      .sort({ sortOrder: 1, name: 1 })
+      .limit(limit)
+      .lean();
+
+    return fallback.map(toDTO);
+  },
+  ["featured-categories"],
+  { tags: ["categories"] },
+);
+
+/**
+ * Categories for the storefront homepage grid. Cached and revalidated
+ * via the "categories" tag whenever a category is created/updated/deleted.
+ */
+export async function getFeaturedCategories(limit = 8): Promise<CategoryDTO[]> {
+  return getCachedFeaturedCategories(limit);
 }
 
 ================
@@ -6408,69 +6348,6 @@ export const couponSchema = z.object({
 export type CouponFormInput = z.infer<typeof couponSchema>;
 
 ================
-File: src/features/hero/actions/hero-actions.ts
-================
-"use server";
-
-import { revalidatePath, revalidateTag } from "next/cache";
-import { dbConnect } from "@/lib/db/dbConnect";
-import { HeroBanner } from "@/models/HeroBanner";
-
-export interface HeroBannerInput {
-  title: string;
-  subtitle?: string;
-  ctaText: string;
-  ctaLink: string;
-  badgeText?: string;
-  couponCode?: string;
-  imageUrl: string;
-  status: "active" | "draft";
-  priority: number;
-}
-
-export async function createHeroBanner(data: HeroBannerInput) {
-  try {
-    await dbConnect();
-    const newBanner = await HeroBanner.create(data);
-    revalidatePath("/admin/hero-banners");
-    revalidatePath("/");
-    revalidateTag("hero-banners", "max");
-    return { success: true, data: JSON.parse(JSON.stringify(newBanner)) };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to create banner";
-    return { success: false, error: errorMessage };
-  }
-}
-
-export async function updateHeroBanner(id: string, data: Partial<HeroBannerInput>) {
-  try {
-    await dbConnect();
-    const updatedBanner = await HeroBanner.findByIdAndUpdate(id, data, { new: true });
-    revalidatePath("/admin/hero-banners");
-    revalidatePath("/");
-    revalidateTag("hero-banners", "max");
-    return { success: true, data: JSON.parse(JSON.stringify(updatedBanner)) };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to update banner";
-    return { success: false, error: errorMessage };
-  }
-}
-
-export async function deleteHeroBanner(id: string) {
-  try {
-    await dbConnect();
-    await HeroBanner.findByIdAndDelete(id);
-    revalidatePath("/admin/hero-banners");
-    revalidatePath("/");
-    revalidateTag("hero-banners", "max");
-    return { success: true };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to delete banner";
-    return { success: false, error: errorMessage };
-  }
-}
-
-================
 File: src/features/hero/components/HeroBannerFormDialog.tsx
 ================
 // src/features/hero/components/HeroBannerFormDialog.tsx
@@ -6918,30 +6795,6 @@ export function HeroBannerTable({ banners }: { banners: BannerData[] }) {
       <HeroBannerFormDialog open={open} onOpenChange={setOpen} initialData={selectedBanner} />
     </div>
   );
-}
-
-================
-File: src/features/hero/queries/get-hero-banners.ts
-================
-import "server-only";
-import { unstable_cache } from "next/cache";
-import { dbConnect } from "@/lib/db/dbConnect";
-import { HeroBanner } from "@/models/HeroBanner";
-
-const getCachedActiveHeroBanners = unstable_cache(
-  async () => {
-    await dbConnect();
-    const banners = await HeroBanner.find({ status: "active" })
-      .sort({ priority: -1, createdAt: -1 })
-      .lean();
-    return JSON.parse(JSON.stringify(banners));
-  },
-  ["active-hero-banners"],
-  { tags: ["hero-banners"] },
-);
-
-export async function getActiveHeroBanners() {
-  return getCachedActiveHeroBanners();
 }
 
 ================
@@ -8733,47 +8586,6 @@ const cartSchema = new Schema<ICart>(
 export const Cart = models.Cart || model<ICart>("Cart", cartSchema);
 
 ================
-File: src/models/Category.ts
-================
-import { Schema, model, models, Types } from "mongoose";
-
-export interface ICategory {
-  name: string;
-  slug: string;
-  description?: string;
-  image?: string;
-  imagePublicId?: string;
-  parentCategoryId: Types.ObjectId | null;
-  status: "active" | "inactive";
-  isFeatured: boolean;
-  sortOrder: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const categorySchema = new Schema<ICategory>(
-  {
-    name: { type: String, required: true, trim: true },
-    slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    description: { type: String, trim: true },
-    image: { type: String, trim: true },
-    imagePublicId: { type: String, default: "" },
-    parentCategoryId: { type: Schema.Types.ObjectId, ref: "Category", default: null },
-    status: { type: String, enum: ["active", "inactive"], default: "active" },
-    isFeatured: { type: Boolean, default: false },
-    sortOrder: { type: Number, default: 0, min: 0 },
-  },
-  { timestamps: true },
-);
-
-// Used when finding active children of a category
-categorySchema.index({ parentCategoryId: 1, status: 1 });
-// Used by the storefront homepage grid: "show featured, active categories, in sort order"
-categorySchema.index({ isFeatured: 1, status: 1, sortOrder: 1 });
-
-export const Category = models.Category || model<ICategory>("Category", categorySchema);
-
-================
 File: src/models/HeroBanner.ts
 ================
 // src/models/HeroBanner.ts
@@ -9688,6 +9500,859 @@ export interface IBrand {
 export type BrandDTO = IBrand;
 
 ================
+File: src/features/category/queries/get-categories.ts
+================
+import "server-only";
+
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Category } from "@/models/Category";
+import type { CategoryDTO } from "../types";
+
+export async function getCategories(): Promise<CategoryDTO[]> {
+  await dbConnect();
+
+  const categories = await Category.find()
+    .sort({ sortOrder: 1, name: 1 })
+    .lean();
+
+  return categories.map((c) => ({
+    id: c._id.toString(),
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    image: c.image,
+    parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
+    status: c.status,
+    isFeatured: c.isFeatured ?? false,
+    sortOrder: c.sortOrder,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  }));
+}
+
+================
+File: src/features/category/queries/get-category-by-id.ts
+================
+import "server-only";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Category } from "@/models/Category";
+import type { CategoryDTO } from "../types";
+
+export async function getCategoryById(id: string): Promise<CategoryDTO | null> {
+  await dbConnect();
+
+  const c = await Category.findById(id).lean();
+  if (!c) return null;
+
+  return {
+    id: c._id.toString(),
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    image: c.image,
+    parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
+    status: c.status,
+    isFeatured: c.isFeatured ?? false,
+    sortOrder: c.sortOrder,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  };
+}
+
+================
+File: src/features/hero/actions/hero-actions.ts
+================
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { HeroBanner } from "@/models/HeroBanner";
+
+export interface HeroBannerInput {
+  title: string;
+  subtitle?: string;
+  ctaText: string;
+  ctaLink: string;
+  badgeText?: string;
+  couponCode?: string;
+  imageUrl: string;
+  status: "active" | "draft";
+  priority: number;
+}
+
+export async function createHeroBanner(data: HeroBannerInput) {
+  try {
+    await dbConnect();
+    const newBanner = await HeroBanner.create(data);
+    revalidatePath("/admin/hero-banners");
+    revalidatePath("/");
+    revalidateTag("hero-banners", "max");
+    return { success: true, data: JSON.parse(JSON.stringify(newBanner)) };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to create banner";
+    return { success: false, error: errorMessage };
+  }
+}
+
+export async function updateHeroBanner(id: string, data: Partial<HeroBannerInput>) {
+  try {
+    await dbConnect();
+    const updatedBanner = await HeroBanner.findByIdAndUpdate(id, data, { new: true });
+    revalidatePath("/admin/hero-banners");
+    revalidatePath("/");
+    revalidateTag("hero-banners", "max");
+    return { success: true, data: JSON.parse(JSON.stringify(updatedBanner)) };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to update banner";
+    return { success: false, error: errorMessage };
+  }
+}
+
+export async function deleteHeroBanner(id: string) {
+  try {
+    await dbConnect();
+    await HeroBanner.findByIdAndDelete(id);
+    revalidatePath("/admin/hero-banners");
+    revalidatePath("/");
+    revalidateTag("hero-banners", "max");
+    return { success: true };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to delete banner";
+    return { success: false, error: errorMessage };
+  }
+}
+
+================
+File: src/features/hero/queries/get-hero-banners.ts
+================
+import "server-only";
+import { unstable_cache } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { HeroBanner } from "@/models/HeroBanner";
+
+const getCachedActiveHeroBanners = unstable_cache(
+  async () => {
+    await dbConnect();
+    const banners = await HeroBanner.find({ status: "active" })
+      .sort({ priority: -1, createdAt: -1 })
+      .lean();
+    return JSON.parse(JSON.stringify(banners));
+  },
+  ["active-hero-banners"],
+  { tags: ["hero-banners"] },
+);
+
+export async function getActiveHeroBanners() {
+  return getCachedActiveHeroBanners();
+}
+
+================
+File: src/lib/action-result.ts
+================
+// export type ActionResult<T = undefined> =
+//   | { success: true; data: T }
+//   | { success: false; message: string; fieldErrors?: Record<string, string[]> };
+
+// export function createActionResult<T = undefined>(
+//   success: boolean,
+//   messageOrData: string | T,
+//   fieldErrors?: Record<string, string[]>
+// ): ActionResult<T> {
+//   if (success) {
+//     return {
+//       success: true,
+//       data: messageOrData as T,
+//     };
+//   }
+
+//   return {
+//     success: false,
+//     message: typeof messageOrData === "string" ? messageOrData : "An error occurred",
+//     fieldErrors,
+//   };
+// }
+
+export type ActionResult<T = undefined> =
+  | { success: true; data?: T; message?: string }
+  | { success: false; message: string; fieldErrors?: Record<string, string[]> };
+
+export function actionSuccess<T = undefined>(
+  data?: T,
+  message?: string
+): ActionResult<T> {
+  return { success: true, data, message };
+}
+
+export function actionError<T = undefined>(
+  message: string,
+  fieldErrors?: Record<string, string[]>
+): ActionResult<T> {
+  return { success: false, message, fieldErrors };
+}
+
+================
+File: src/lib/auth.ts
+================
+import { auth } from "@clerk/nextjs/server";
+
+import { AppError } from "@/lib/AppError";
+
+/*
+ * IMPORTANT one-time setup (Clerk Dashboard):
+ * Sessions → Customize session token → add claim:
+ *   { "metadata": "{{user.public_metadata}}" }
+ * Without this, sessionClaims.metadata is undefined even after you set
+ * publicMetadata.role on a user — the role never reaches the session token.
+ *
+ * These replace your old Express `requireAuth`/`requireAdmin` middleware.
+ * Same checks, same messages, same status codes carried into AppError —
+ * but called as the first line inside a Server Action/Route Handler instead
+ * of sitting in a router chain.
+ */
+
+export async function requireAuth(): Promise<string> {
+  const { userId } = await auth();
+
+  if (!userId) {
+    throw new AppError("Unauthenticated access", 401);
+  }
+
+  return userId;
+}
+
+export async function requireAdmin(): Promise<string> {
+  const { userId, sessionClaims } = await auth();
+
+  // 1. Ensure user is authenticated
+  if (!userId) {
+    throw new AppError("Unauthenticated access", 401);
+  }
+
+  // 2. Check publicMetadata (mirrored into the session token) for admin role
+  const metadata = sessionClaims?.metadata as { role?: string } | undefined;
+
+  if (metadata?.role !== "admin") {
+    throw new AppError("Admin access required", 403);
+  }
+
+  return userId;
+}
+
+================
+File: src/lib/cloudinary.ts
+================
+import "server-only";
+import { v2 as cloudinary } from "cloudinary";
+import { env } from "./env";
+
+cloudinary.config({
+  cloud_name: env.CLOUDINARY_CLOUD_NAME,
+  api_key: env.CLOUDINARY_API_KEY,
+  api_secret: env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
+
+export type CloudinaryUploadResult = {
+  secure_url: string;
+  url: string;
+  publicId: string;
+};
+
+/*
+ * Uploads a buffer to Cloudinary via its upload_stream API (no temp files on
+ * disk — everything stays in memory, which is fine for the image sizes we
+ * accept, see lib/image-validation.ts).
+ *
+ * Callers are responsible for the "no orphans" rule: only call this AFTER
+ * every other validation/DB precondition for the write has already passed,
+ * and roll back with deleteImageFromCloudinary() if a subsequent DB write
+ * fails. See features/category/actions/*.ts for the reference pattern.
+ */
+export async function uploadImageToCloudinary(
+  buffer: Buffer,
+  folder: string,
+): Promise<CloudinaryUploadResult> {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "image" },
+      (error, result) => {
+        if (error || !result) {
+          reject(error ?? new Error("Cloudinary upload failed with no result"));
+          return;
+        }
+        resolve({
+          secure_url: result.secure_url,
+          url: result.secure_url,
+          publicId: result.public_id,
+        });
+      },
+    );
+    uploadStream.end(buffer);
+  });
+}
+
+export async function deleteImageFromCloudinary(publicId: string): Promise<void> {
+  await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+}
+
+export function getPublicIdFromUrl(url: string): string | null {
+  try {
+    const regex = /\/v\d+\/(.+)\.[a-z]+$/i;
+    const match = url.match(regex);
+    if (match && match[1]) {
+      return match[1];
+    }
+    // Fallback split logic if version prefix isn't present
+    const parts = url.split("/");
+    const filenameWithExt = parts.pop();
+    const folder = parts.pop();
+    if (!filenameWithExt) return null;
+    const filename = filenameWithExt.split(".")[0];
+    return folder ? `${folder}/${filename}` : filename;
+  } catch {
+    return null;
+  }
+}
+
+================
+File: src/lib/env.ts
+================
+const requiredEnvVars = [
+  "MONGODB_URI",
+  "CLOUDINARY_CLOUD_NAME",
+  "CLOUDINARY_API_KEY",
+  "CLOUDINARY_API_SECRET",
+  // "CLERK_WEBHOOK_SECRET",
+  // "STRIPE_SECRET_KEY",
+  // "STRIPE_WEBHOOK_SECRET",
+] as const;
+
+for (const key of requiredEnvVars) {
+  if (!process.env[key]) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+}
+
+export const env = {
+  NODE_ENV: process.env.NODE_ENV ?? "development",
+  MONGODB_URI: process.env.MONGODB_URI as string,
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME as string,
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY as string,
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET as string,
+  CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET as string,
+  // STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY as string,
+  // STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET as string,
+};
+
+================
+File: src/models/Category.ts
+================
+import { Schema, model, models, Types } from "mongoose";
+
+export interface ICategory {
+  name: string;
+  slug: string;
+  description?: string;
+  image?: string;
+  imagePublicId?: string;
+  parentCategoryId: Types.ObjectId | null;
+  status: "active" | "inactive";
+  isFeatured: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const categorySchema = new Schema<ICategory>(
+  {
+    name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    description: { type: String, trim: true },
+    image: { type: String, trim: true },
+    imagePublicId: { type: String, default: "" },
+    parentCategoryId: { type: Schema.Types.ObjectId, ref: "Category", default: null },
+    status: { type: String, enum: ["active", "inactive"], default: "active" },
+    isFeatured: { type: Boolean, default: false },
+    sortOrder: { type: Number, default: 0, min: 0 },
+  },
+  { timestamps: true },
+);
+
+// Used when finding active children of a category
+categorySchema.index({ parentCategoryId: 1, status: 1 });
+// Used by the storefront homepage grid: "show featured, active categories, in sort order"
+categorySchema.index({ isFeatured: 1, status: 1, sortOrder: 1 });
+
+export const Category = models.Category || model<ICategory>("Category", categorySchema);
+
+================
+File: src/models/Coupon.ts
+================
+import { Schema, model, models } from "mongoose";
+
+export interface ICoupon {
+  code: string;
+  discountType: "percentage" 
+  discountValue: number;
+  minOrderValue?: number;
+  maxUses?: number;
+  usedCount: number;
+  expiresAt?: Date;
+  status: "active" | "inactive";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const couponSchema = new Schema<ICoupon>(
+  {
+    code: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    discountType: { type: String, enum: ["percentage"], required: true },
+    discountValue: { type: Number, required: true, min: 0 },
+    minOrderValue: { type: Number, min: 0 },
+    maxUses: { type: Number, min: 1 },
+    // How many times this coupon has actually been applied so far.
+    // Order actions increment this when a coupon is used.
+    usedCount: { type: Number, default: 0, min: 0 },
+    expiresAt: { type: Date },
+    status: { type: String, enum: ["active", "inactive"], default: "active" },
+  },
+  { timestamps: true },
+);
+
+export const Coupon = models.Coupon || model<ICoupon>("Coupon", couponSchema);
+
+================
+File: src/models/Product.ts
+================
+import { Schema, model, models, Types } from "mongoose";
+
+export interface IProductVariant {
+  sku: string;
+  attributes: Record<string, string>; // e.g. { color: "Red", size: "M" }
+  price: number;
+  discountPrice?: number;
+  stock: number;
+  images?: string[];
+}
+
+export interface IProduct {
+  name: string;
+  slug: string;
+  description?: string;
+  categoryId: Types.ObjectId;
+  brandId: Types.ObjectId;
+  images: string[];
+  imagePublicIds?: string[];
+  variants: IProductVariant[];
+  status: "active" | "inactive";
+  isFeatured: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const productVariantSchema = new Schema<IProductVariant>(
+  {
+    sku: { type: String, required: true, trim: true, uppercase: true },
+    attributes: { type: Map, of: String, default: {} },
+    price: { type: Number, required: true, min: 0 },
+    discountPrice: { type: Number, min: 0 },
+    stock: { type: Number, required: true, min: 0, default: 0 },
+    images: { type: [String], default: [] },
+  },
+  { timestamps: false },
+);
+
+const productSchema = new Schema<IProduct>(
+  {
+    name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    description: { type: String, trim: true },
+    categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
+    brandId: { type: Schema.Types.ObjectId, ref: "Brand", required: true },
+    images: { type: [String], default: [] },
+    imagePublicIds: { type: [String], default: [] },
+    variants: {
+      type: [productVariantSchema],
+      validate: {
+        validator: (variants: IProductVariant[]) => variants.length > 0,
+        message: "A product must have at least one variant",
+      },
+    },
+    status: { type: String, enum: ["active", "inactive"], default: "active" },
+    isFeatured: { type: Boolean, default: false },
+  },
+  { timestamps: true },
+);
+
+productSchema.index({ categoryId: 1, status: 1 });
+productSchema.index({ brandId: 1, status: 1 });
+productSchema.index({ "variants.sku": 1 }, { unique: true });
+// Used by the homepage: "show active, featured products, newest first"
+productSchema.index({ isFeatured: 1, status: 1, createdAt: -1 });
+
+export const Product = models.Product || model<IProduct>("Product", productSchema);
+
+================
+File: src/proxy.ts
+================
+import { clerkMiddleware  } from '@clerk/nextjs/server'
+
+export default clerkMiddleware()
+
+export const config = {
+  matcher: [
+    // Skip Next.js internals and all static files, unless found in search params
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Always run for API routes
+    '/(api|trpc)(.*)',
+    // Always run for Clerk-specific frontend API routes
+    '/__clerk/(.*)',
+  ],
+}
+
+================
+File: README.md
+================
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Next.js-Ecommerce-Store
+
+================
+File: tsconfig.json
+================
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+
+================
+File: src/app/admin/brands/page.tsx
+================
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { getBrands } from "@/features/brand/queries/get-brands";
+import { Button } from "@/components/ui/button";
+import { BrandTable } from "@/features/brand/components/BrandsTable";
+
+export default async function AdminBrandsPage() {
+  const brands = await getBrands();
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Brands</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage product Brands and hierarchy for your store.
+          </p>
+        </div>
+        <Link href="/admin/brands/new">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            New Brand
+          </Button>
+        </Link>
+      </div>
+
+      <BrandTable brands={brands} />
+    </div>
+  );
+}
+
+================
+File: src/app/admin/categories/new/page.tsx
+================
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+
+import { getCategories } from "@/features/category/queries/get-categories";
+import { CategoryForm } from "@/features/category/components/CategoryForm";
+import { Button } from "@/components/ui/button";
+
+export default async function NewCategoryPage() {
+  const parentOptions = await getCategories();
+
+  return (
+    <div className="flex max-w-2xl flex-col gap-6">
+      <div className="flex items-center gap-4">
+        <Link href="/admin/categories">
+          <Button variant="outline" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">New Category</h1>
+          <p className="text-sm text-muted-foreground">
+            Add a new category to your store catalog.
+          </p>
+        </div>
+      </div>
+
+      <CategoryForm mode="create" parentOptions={parentOptions} />
+    </div>
+  );
+}
+
+================
+File: src/app/admin/layout.tsx
+================
+'use server'
+import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/auth";
+import { AppError } from "@/lib/AppError";
+import AppSidebar from "@/components/admin/AppSidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  try {
+    await requireAdmin();
+  } catch (err) {
+    if (err instanceof AppError) {
+      redirect("/");
+    }
+    throw err;
+  }
+
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex h-14 items-center gap-2 border-b px-4">
+          <SidebarTrigger />
+        </header>
+        <main className="flex-1 p-6">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+
+================
+File: src/app/admin/page.tsx
+================
+export default function AdminPage() {
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Pick a section from the sidebar to get started.
+      </p>
+    </div>
+  );
+}
+
+================
+File: src/app/globals.css
+================
+@import "tailwindcss";
+@import "./typeset.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+
+.typeset-article {
+  --typeset-font-body: var(--font-raleway);
+  --typeset-font-heading: var(--font-geist);
+  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-size: 16px;
+  --typeset-leading: 1.6;
+  --typeset-flow: 1.25em;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  /* --font-sans: var(--font-sans); */
+  /* --font-mono: var(--font-geist-mono); */
+  /* --font-heading: var(--font-sans); */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+================
 File: src/features/category/actions/create-category.ts
 ================
 "use server";
@@ -10063,408 +10728,6 @@ export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 
 ================
-File: src/lib/action-result.ts
-================
-// export type ActionResult<T = undefined> =
-//   | { success: true; data: T }
-//   | { success: false; message: string; fieldErrors?: Record<string, string[]> };
-
-// export function createActionResult<T = undefined>(
-//   success: boolean,
-//   messageOrData: string | T,
-//   fieldErrors?: Record<string, string[]>
-// ): ActionResult<T> {
-//   if (success) {
-//     return {
-//       success: true,
-//       data: messageOrData as T,
-//     };
-//   }
-
-//   return {
-//     success: false,
-//     message: typeof messageOrData === "string" ? messageOrData : "An error occurred",
-//     fieldErrors,
-//   };
-// }
-
-export type ActionResult<T = undefined> =
-  | { success: true; data?: T; message?: string }
-  | { success: false; message: string; fieldErrors?: Record<string, string[]> };
-
-export function actionSuccess<T = undefined>(
-  data?: T,
-  message?: string
-): ActionResult<T> {
-  return { success: true, data, message };
-}
-
-export function actionError<T = undefined>(
-  message: string,
-  fieldErrors?: Record<string, string[]>
-): ActionResult<T> {
-  return { success: false, message, fieldErrors };
-}
-
-================
-File: src/lib/auth.ts
-================
-import { auth } from "@clerk/nextjs/server";
-
-import { AppError } from "@/lib/AppError";
-
-/*
- * IMPORTANT one-time setup (Clerk Dashboard):
- * Sessions → Customize session token → add claim:
- *   { "metadata": "{{user.public_metadata}}" }
- * Without this, sessionClaims.metadata is undefined even after you set
- * publicMetadata.role on a user — the role never reaches the session token.
- *
- * These replace your old Express `requireAuth`/`requireAdmin` middleware.
- * Same checks, same messages, same status codes carried into AppError —
- * but called as the first line inside a Server Action/Route Handler instead
- * of sitting in a router chain.
- */
-
-export async function requireAuth(): Promise<string> {
-  const { userId } = await auth();
-
-  if (!userId) {
-    throw new AppError("Unauthenticated access", 401);
-  }
-
-  return userId;
-}
-
-export async function requireAdmin(): Promise<string> {
-  const { userId, sessionClaims } = await auth();
-
-  // 1. Ensure user is authenticated
-  if (!userId) {
-    throw new AppError("Unauthenticated access", 401);
-  }
-
-  // 2. Check publicMetadata (mirrored into the session token) for admin role
-  const metadata = sessionClaims?.metadata as { role?: string } | undefined;
-
-  if (metadata?.role !== "admin") {
-    throw new AppError("Admin access required", 403);
-  }
-
-  return userId;
-}
-
-================
-File: src/lib/cloudinary.ts
-================
-import "server-only";
-import { v2 as cloudinary } from "cloudinary";
-import { env } from "./env";
-
-cloudinary.config({
-  cloud_name: env.CLOUDINARY_CLOUD_NAME,
-  api_key: env.CLOUDINARY_API_KEY,
-  api_secret: env.CLOUDINARY_API_SECRET,
-  secure: true,
-});
-
-export type CloudinaryUploadResult = {
-  secure_url: string;
-  url: string;
-  publicId: string;
-};
-
-/*
- * Uploads a buffer to Cloudinary via its upload_stream API (no temp files on
- * disk — everything stays in memory, which is fine for the image sizes we
- * accept, see lib/image-validation.ts).
- *
- * Callers are responsible for the "no orphans" rule: only call this AFTER
- * every other validation/DB precondition for the write has already passed,
- * and roll back with deleteImageFromCloudinary() if a subsequent DB write
- * fails. See features/category/actions/*.ts for the reference pattern.
- */
-export async function uploadImageToCloudinary(
-  buffer: Buffer,
-  folder: string,
-): Promise<CloudinaryUploadResult> {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: "image" },
-      (error, result) => {
-        if (error || !result) {
-          reject(error ?? new Error("Cloudinary upload failed with no result"));
-          return;
-        }
-        resolve({
-          secure_url: result.secure_url,
-          url: result.secure_url,
-          publicId: result.public_id,
-        });
-      },
-    );
-    uploadStream.end(buffer);
-  });
-}
-
-export async function deleteImageFromCloudinary(publicId: string): Promise<void> {
-  await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
-}
-
-export function getPublicIdFromUrl(url: string): string | null {
-  try {
-    const regex = /\/v\d+\/(.+)\.[a-z]+$/i;
-    const match = url.match(regex);
-    if (match && match[1]) {
-      return match[1];
-    }
-    // Fallback split logic if version prefix isn't present
-    const parts = url.split("/");
-    const filenameWithExt = parts.pop();
-    const folder = parts.pop();
-    if (!filenameWithExt) return null;
-    const filename = filenameWithExt.split(".")[0];
-    return folder ? `${folder}/${filename}` : filename;
-  } catch {
-    return null;
-  }
-}
-
-================
-File: src/lib/env.ts
-================
-const requiredEnvVars = [
-  "MONGODB_URI",
-  "CLOUDINARY_CLOUD_NAME",
-  "CLOUDINARY_API_KEY",
-  "CLOUDINARY_API_SECRET",
-  // "CLERK_WEBHOOK_SECRET",
-  // "STRIPE_SECRET_KEY",
-  // "STRIPE_WEBHOOK_SECRET",
-] as const;
-
-for (const key of requiredEnvVars) {
-  if (!process.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-}
-
-export const env = {
-  NODE_ENV: process.env.NODE_ENV ?? "development",
-  MONGODB_URI: process.env.MONGODB_URI as string,
-  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME as string,
-  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY as string,
-  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET as string,
-  CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET as string,
-  // STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY as string,
-  // STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET as string,
-};
-
-================
-File: src/models/Coupon.ts
-================
-import { Schema, model, models } from "mongoose";
-
-export interface ICoupon {
-  code: string;
-  discountType: "percentage" 
-  discountValue: number;
-  minOrderValue?: number;
-  maxUses?: number;
-  usedCount: number;
-  expiresAt?: Date;
-  status: "active" | "inactive";
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const couponSchema = new Schema<ICoupon>(
-  {
-    code: { type: String, required: true, unique: true, uppercase: true, trim: true },
-    discountType: { type: String, enum: ["percentage"], required: true },
-    discountValue: { type: Number, required: true, min: 0 },
-    minOrderValue: { type: Number, min: 0 },
-    maxUses: { type: Number, min: 1 },
-    // How many times this coupon has actually been applied so far.
-    // Order actions increment this when a coupon is used.
-    usedCount: { type: Number, default: 0, min: 0 },
-    expiresAt: { type: Date },
-    status: { type: String, enum: ["active", "inactive"], default: "active" },
-  },
-  { timestamps: true },
-);
-
-export const Coupon = models.Coupon || model<ICoupon>("Coupon", couponSchema);
-
-================
-File: src/models/Product.ts
-================
-import { Schema, model, models, Types } from "mongoose";
-
-export interface IProductVariant {
-  sku: string;
-  attributes: Record<string, string>; // e.g. { color: "Red", size: "M" }
-  price: number;
-  discountPrice?: number;
-  stock: number;
-  images?: string[];
-}
-
-export interface IProduct {
-  name: string;
-  slug: string;
-  description?: string;
-  categoryId: Types.ObjectId;
-  brandId: Types.ObjectId;
-  images: string[];
-  imagePublicIds?: string[];
-  variants: IProductVariant[];
-  status: "active" | "inactive";
-  isFeatured: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const productVariantSchema = new Schema<IProductVariant>(
-  {
-    sku: { type: String, required: true, trim: true, uppercase: true },
-    attributes: { type: Map, of: String, default: {} },
-    price: { type: Number, required: true, min: 0 },
-    discountPrice: { type: Number, min: 0 },
-    stock: { type: Number, required: true, min: 0, default: 0 },
-    images: { type: [String], default: [] },
-  },
-  { timestamps: false },
-);
-
-const productSchema = new Schema<IProduct>(
-  {
-    name: { type: String, required: true, trim: true },
-    slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    description: { type: String, trim: true },
-    categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
-    brandId: { type: Schema.Types.ObjectId, ref: "Brand", required: true },
-    images: { type: [String], default: [] },
-    imagePublicIds: { type: [String], default: [] },
-    variants: {
-      type: [productVariantSchema],
-      validate: {
-        validator: (variants: IProductVariant[]) => variants.length > 0,
-        message: "A product must have at least one variant",
-      },
-    },
-    status: { type: String, enum: ["active", "inactive"], default: "active" },
-    isFeatured: { type: Boolean, default: false },
-  },
-  { timestamps: true },
-);
-
-productSchema.index({ categoryId: 1, status: 1 });
-productSchema.index({ brandId: 1, status: 1 });
-productSchema.index({ "variants.sku": 1 }, { unique: true });
-// Used by the homepage: "show active, featured products, newest first"
-productSchema.index({ isFeatured: 1, status: 1, createdAt: -1 });
-
-export const Product = models.Product || model<IProduct>("Product", productSchema);
-
-================
-File: src/proxy.ts
-================
-import { clerkMiddleware  } from '@clerk/nextjs/server'
-
-export default clerkMiddleware()
-
-export const config = {
-  matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
-    '/(api|trpc)(.*)',
-    // Always run for Clerk-specific frontend API routes
-    '/__clerk/(.*)',
-  ],
-}
-
-================
-File: README.md
-================
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# Next.js-Ecommerce-Store
-
-================
-File: tsconfig.json
-================
-{
-  "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
-  ],
-  "exclude": ["node_modules"]
-}
-
-================
 File: src/app/(marketing)/page.tsx
 ================
 import { getActiveHeroBanners } from "@/features/hero/queries/get-hero-banners";
@@ -10486,269 +10749,6 @@ export default async function MarketingPage() {
       <CategoryGridSection categories={categories} />
     </main>
   );
-}
-
-================
-File: src/app/admin/brands/page.tsx
-================
-import Link from "next/link";
-import { Plus } from "lucide-react";
-import { getBrands } from "@/features/brand/queries/get-brands";
-import { Button } from "@/components/ui/button";
-import { BrandTable } from "@/features/brand/components/BrandsTable";
-
-export default async function AdminBrandsPage() {
-  const brands = await getBrands();
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Brands</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage product Brands and hierarchy for your store.
-          </p>
-        </div>
-        <Link href="/admin/brands/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Brand
-          </Button>
-        </Link>
-      </div>
-
-      <BrandTable brands={brands} />
-    </div>
-  );
-}
-
-================
-File: src/app/admin/categories/new/page.tsx
-================
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-
-import { getCategories } from "@/features/category/queries/get-categories";
-import { CategoryForm } from "@/features/category/components/CategoryForm";
-import { Button } from "@/components/ui/button";
-
-export default async function NewCategoryPage() {
-  const parentOptions = await getCategories();
-
-  return (
-    <div className="flex max-w-2xl flex-col gap-6">
-      <div className="flex items-center gap-4">
-        <Link href="/admin/categories">
-          <Button variant="outline" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Category</h1>
-          <p className="text-sm text-muted-foreground">
-            Add a new category to your store catalog.
-          </p>
-        </div>
-      </div>
-
-      <CategoryForm mode="create" parentOptions={parentOptions} />
-    </div>
-  );
-}
-
-================
-File: src/app/admin/layout.tsx
-================
-'use server'
-import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
-import { AppError } from "@/lib/AppError";
-import AppSidebar from "@/components/admin/AppSidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  try {
-    await requireAdmin();
-  } catch (err) {
-    if (err instanceof AppError) {
-      redirect("/");
-    }
-    throw err;
-  }
-
-  return (
-    <SidebarProvider defaultOpen={true}>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-14 items-center gap-2 border-b px-4">
-          <SidebarTrigger />
-        </header>
-        <main className="flex-1 p-6">{children}</main>
-      </SidebarInset>
-    </SidebarProvider>
-  );
-}
-
-================
-File: src/app/admin/page.tsx
-================
-export default function AdminPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Pick a section from the sidebar to get started.
-      </p>
-    </div>
-  );
-}
-
-================
-File: src/app/globals.css
-================
-@import "tailwindcss";
-@import "./typeset.css";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
-
-
-.typeset-article {
-  --typeset-font-body: var(--font-raleway);
-  --typeset-font-heading: var(--font-geist);
-  --typeset-font-mono: var(--font-geist-mono);
-  --typeset-size: 16px;
-  --typeset-leading: 1.6;
-  --typeset-flow: 1.25em;
-}
-
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  /* --font-sans: var(--font-sans); */
-  /* --font-mono: var(--font-geist-mono); */
-  /* --font-heading: var(--font-sans); */
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  button:not(:disabled), [role="button"]:not(:disabled) {
-    cursor: pointer;
-  }
-  html {
-    @apply font-sans;
-  }
 }
 
 ================

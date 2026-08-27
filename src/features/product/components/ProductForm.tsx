@@ -1,3 +1,6 @@
+// src/features/product/components/ProductForm.tsx
+// Add this section in the form where you have status and other fields
+
 "use client";
 
 import { useState, useTransition, useRef } from "react";
@@ -12,6 +15,7 @@ import {
   Upload,
   X,
   Layers,
+  Star,
 } from "lucide-react";
 
 import { createProduct } from "../actions/create-product";
@@ -83,6 +87,11 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
   const [status, setStatus] = useState<"active" | "inactive">(
     product?.status ?? "active",
   );
+  
+  // NEW: Add isFeatured state
+  const [isFeatured, setIsFeatured] = useState<boolean>(
+    product?.isFeatured ?? false,
+  );
 
   // 1. Existing Cloudinary Images & Public IDs State
   const [existingImages, setExistingImages] = useState<string[]>(
@@ -122,13 +131,13 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
   });
 
   function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-  });
-}
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  }
 
   // Handle New File Selection
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -230,86 +239,87 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
 
   // Submit Handler
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-  e.preventDefault();
-  setFormError(null);
-  setFieldErrors({});
+    e.preventDefault();
+    setFormError(null);
+    setFieldErrors({});
 
-  if (!categoryId) return setFormError("Please select a category.");
-  if (!brandId) return setFormError("Please select a brand.");
+    if (!categoryId) return setFormError("Please select a category.");
+    if (!brandId) return setFormError("Please select a brand.");
 
-  const form = e.currentTarget;
-  const formData = new FormData(form);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
-  startTransition(async () => {
-    try {
-      const finalImages = [...existingImages];
-      const finalPublicIds = [...existingPublicIds];
+    startTransition(async () => {
+      try {
+        const finalImages = [...existingImages];
+        const finalPublicIds = [...existingPublicIds];
 
-      // Upload new selected files if any exist
-      if (newFiles.length > 0) {
-        const base64Files = await Promise.all(newFiles.map(fileToBase64));
-        const uploaded = await uploadImagesToCloudinary(base64Files);
+        // Upload new selected files if any exist
+        if (newFiles.length > 0) {
+          const base64Files = await Promise.all(newFiles.map(fileToBase64));
+          const uploaded = await uploadImagesToCloudinary(base64Files);
 
-        uploaded.forEach((img) => {
-          finalImages.push(img.url);
-          finalPublicIds.push(img.publicId);
+          uploaded.forEach((img) => {
+            finalImages.push(img.url);
+            finalPublicIds.push(img.publicId);
+          });
+        }
+
+        // Format Variants
+        const formattedVariants = variants.map((v) => {
+          const attributesRecord: Record<string, string> = {};
+          v.attributes.forEach((attr) => {
+            if (attr.key.trim() && attr.value.trim()) {
+              attributesRecord[attr.key.trim().toLowerCase()] = attr.value.trim();
+            }
+          });
+
+          return {
+            _id: v._id,
+            sku: v.sku.trim().toUpperCase(),
+            price: Number(v.price),
+            discountPrice: v.discountPrice ? Number(v.discountPrice) : undefined,
+            stock: Number(v.stock),
+            attributes: attributesRecord,
+          };
         });
-      }
 
-      // Format Variants
-      const formattedVariants = variants.map((v) => {
-        const attributesRecord: Record<string, string> = {};
-        v.attributes.forEach((attr) => {
-          if (attr.key.trim() && attr.value.trim()) {
-            attributesRecord[attr.key.trim().toLowerCase()] = attr.value.trim();
-          }
-        });
-
-        return {
-          _id: v._id,
-          sku: v.sku.trim().toUpperCase(),
-          price: Number(v.price),
-          discountPrice: v.discountPrice ? Number(v.discountPrice) : undefined,
-          stock: Number(v.stock),
-          attributes: attributesRecord,
+        // Construct Payload with populated Cloudinary array data
+        const payload = {
+          name: formData.get("name") as string,
+          slug: formData.get("slug") as string,
+          description: formData.get("description") as string,
+          categoryId,
+          brandId,
+          status,
+          isFeatured, // NEW: Include isFeatured in payload
+          images: finalImages,
+          imagePublicIds: finalPublicIds,
+          variants: formattedVariants,
         };
-      });
 
-      // Construct Payload with populated Cloudinary array data
-      const payload = {
-        name: formData.get("name") as string,
-        slug: formData.get("slug") as string,
-        description: formData.get("description") as string,
-        categoryId,
-        brandId,
-        status,
-        images: finalImages,
-        imagePublicIds: finalPublicIds,
-        variants: formattedVariants,
-      };
+        const action =
+          mode === "create"
+            ? createProduct(payload)
+            : updateProduct(product!._id, payload);
 
-      const action =
-        mode === "create"
-          ? createProduct(payload)
-          : updateProduct(product!._id, payload);
+        const result = await action;
 
-      const result = await action;
+        if (!result.success) {
+          setFormError(result.message);
+          setFieldErrors(result.fieldErrors || {});
+          return;
+        }
 
-      if (!result.success) {
-        setFormError(result.message);
-        setFieldErrors(result.fieldErrors || {});
-        return;
+        router.push("/admin/products");
+        router.refresh();
+      } catch (err: unknown) {
+        setFormError(
+          err instanceof Error ? err.message : "Failed to process image uploads."
+        );
       }
-
-      router.push("/admin/products");
-      router.refresh();
-    } catch (err: unknown) {
-      setFormError(
-        err instanceof Error ? err.message : "Failed to process image uploads."
-      );
-    }
-  });
-}
+    });
+  }
 
   return (
     <Card className="max-w-5xl mx-auto">
@@ -371,7 +381,8 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Category, Brand, Status, and Featured */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Category *</Label>
               <Select
@@ -428,6 +439,40 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
                   <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* NEW: Featured Toggle */}
+            <div className="space-y-2">
+              <Label>Featured Product</Label>
+              <div className="flex h-8 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsFeatured(!isFeatured)}
+                  className={`
+                    relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                    ${isFeatured ? 'bg-primary' : 'bg-muted'}
+                  `}
+                >
+                  <span
+                    className={`
+                      inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                      ${isFeatured ? 'translate-x-6' : 'translate-x-1'}
+                    `}
+                  />
+                </button>
+                <div className="flex items-center gap-2">
+                  <Star className={`
+                    h-4 w-4 transition-colors
+                    ${isFeatured ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}
+                  `} />
+                  <span className="text-xs text-muted-foreground">
+                    {isFeatured ? 'Featured' : 'Not Featured'}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Featured products appear on the homepage
+              </p>
             </div>
           </div>
 

@@ -1,20 +1,47 @@
+// src/app/(marketing)/page.tsx
 import { getActiveHeroBanners } from "@/features/hero/queries/get-hero-banners";
 import { HeroBannerSection } from "@/features/hero/components/HeroBannerSection";
 import { getFeaturedCategories } from "@/features/category/queries/get-featured-categories";
 import { CategoryGridSection } from "@/features/category/components/CategoryGridSection";
+import { getActiveBrands } from "@/features/brand/queries/get-active-brands";
+import { BrandStrip } from "@/features/brand/components/BrandStrip";
+import { getFeaturedProducts } from "@/features/product/queries/get-featured-products";
+import { FeaturedProductsSection } from "@/features/product/components/FeaturedProductsSection";
 
 export default async function MarketingPage() {
-  const [banners, categories] = await Promise.all([
-    getActiveHeroBanners(),
-    getFeaturedCategories(),
-  ]);
+  const [banners, categories, brands, featuredProducts, bestSellingProducts, newArrivals] =
+    await Promise.all([
+      getActiveHeroBanners(),
+      getFeaturedCategories(),
+      getActiveBrands(12),
+      getFeaturedProducts({ limit: 8, type: "featured" }),
+      getFeaturedProducts({ limit: 8, type: "bestSelling" }),
+      getFeaturedProducts({ limit: 8, type: "newArrivals" }),
+    ]);
 
   const primaryBanner = banners[0];
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-12">
+      {/* Hero Banner */}
       {primaryBanner && <HeroBannerSection banner={primaryBanner} />}
+
+      {/* Category Grid */}
       <CategoryGridSection categories={categories} />
+
+      {/* Featured Products Section - New Addition */}
+      <FeaturedProductsSection
+        featuredProducts={featuredProducts}
+        bestSellingProducts={bestSellingProducts}
+        newArrivals={newArrivals}
+      />
+
+      {/* Brand Strip */}
+      <BrandStrip
+        brands={brands}
+        title="Trusted Brands"
+        subtitle="Shop from industry-leading brands you know and love"
+      />
     </main>
   );
 }

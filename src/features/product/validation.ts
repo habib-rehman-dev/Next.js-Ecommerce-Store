@@ -1,3 +1,4 @@
+// src/features/product/validation.ts
 import { z } from "zod";
 
 export const variantSchema = z.object({
@@ -16,7 +17,7 @@ export const productSchema = z.object({
   categoryId: z.string().min(1, "Category is required"),
   brandId: z.string().min(1, "Brand is required"),
   status: z.enum(["active", "inactive"]).default("active"),
-  isFeatured: z.coerce.boolean().default(false),
+  isFeatured: z.boolean().default(false), // Make sure this is properly defined
   images: z.array(z.string()).default([]),
   imagePublicIds: z.array(z.string()).default([]),
   variants: z
