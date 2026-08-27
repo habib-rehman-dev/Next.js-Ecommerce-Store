@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Star, StarOff } from "lucide-react";
-import { toggleProductFeatured } from "@/features/product/actions/toggle-featured";
+import { toggleProductFeaturedForm } from "@/features/product/actions/toggle-featured";
 
 export default async function FeaturedProductsPage() {
   const { products } = await getProducts({ limit: 100 });
@@ -55,7 +55,7 @@ export default async function FeaturedProductsPage() {
                   <TableRow key={product._id}>
                     <TableCell>{product.name}</TableCell>
                     <TableCell className="text-right">
-                      <form action={async (formData) => { await toggleProductFeatured(formData); }}>
+                      <form action={toggleProductFeaturedForm}>
                         <input type="hidden" name="productId" value={product._id} />
                         <input type="hidden" name="featured" value="false" />
                         <Button variant="ghost" size="sm" type="submit">
@@ -97,7 +97,7 @@ export default async function FeaturedProductsPage() {
                   <TableRow key={product._id}>
                     <TableCell>{product.name}</TableCell>
                     <TableCell className="text-right">
-                      <form action={async (formData) => { await toggleProductFeatured(formData); }}>
+                      <form action={toggleProductFeaturedForm}>
                         <input type="hidden" name="productId" value={product._id} />
                         <input type="hidden" name="featured" value="true" />
                         <Button variant="outline" size="sm" type="submit">

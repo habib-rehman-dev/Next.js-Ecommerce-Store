@@ -52,3 +52,7 @@ export async function toggleProductFeatured(formData: FormData): Promise<ActionR
     };
   }
 }
+
+export async function toggleProductFeaturedForm(formData: FormData): Promise<void> {
+  await toggleProductFeatured(formData);
+}
