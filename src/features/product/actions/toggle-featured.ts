@@ -1,4 +1,4 @@
-
+// src/features/product/actions/toggle-featured.ts
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
@@ -37,8 +37,8 @@ export async function toggleProductFeatured(formData: FormData): Promise<ActionR
     revalidatePath("/admin/products");
     revalidatePath("/admin/products/featured");
     revalidatePath("/");
-    revalidateTag("products");
-    revalidateTag("featured-products");
+    revalidateTag("products", "max");
+    revalidateTag("featured-products", "max");
 
     return { 
       success: true, 
