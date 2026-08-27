@@ -1,3 +1,4 @@
+// src/features/category/validation.ts
 import { z } from "zod";
 
 export const createCategorySchema = z.object({
@@ -12,6 +13,7 @@ export const createCategorySchema = z.object({
   description: z.string().trim().max(500).optional().or(z.literal("")),
   parentCategoryId: z.string().trim().nullable().optional(),
   status: z.enum(["active", "inactive"]).default("active"),
+  isFeatured: z.coerce.boolean().default(false),
   sortOrder: z.coerce.number().int().min(0).default(0),
 });
 

@@ -7,6 +7,7 @@ import { Category } from "@/models/Category";
 import { Product } from "@/models/Product";
 import type { ActionResult } from "@/lib/action-result";
 import { deleteImageFromCloudinary } from "@/lib/cloudinary";
+import { revalidateTag } from "next/cache";
 
 export async function deleteCategory(id: string): Promise<ActionResult> {
   try {
@@ -54,6 +55,8 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/categories");
+  revalidatePath("/");
+  revalidateTag("categories", "max");
 
   return { success: true, data: undefined };
 }

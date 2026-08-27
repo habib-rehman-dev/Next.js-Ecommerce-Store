@@ -6,8 +6,8 @@ export type CategoryDTO = {
   image?: string;
   parentCategoryId: string | null;
   status: "active" | "inactive";
+  isFeatured: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
-

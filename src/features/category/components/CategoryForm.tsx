@@ -41,18 +41,16 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Controlled states for shadcn Select components (they don't participate
-  // in native form submission, so we read these directly rather than off
-  // the FormData object).
   const [parentCategory, setParentCategory] = useState<string>(
     category?.parentCategoryId ?? "none"
   );
   const [status, setStatus] = useState<"active" | "inactive">(
     category?.status ?? "active"
   );
+  const [isFeatured, setIsFeatured] = useState<boolean>(
+    category?.isFeatured ?? false
+  );
 
-  // Image preview — shows the existing image in edit mode until the admin
-  // picks a replacement, or the newly-picked file's local preview.
   const [imagePreview, setImagePreview] = useState<string | null>(category?.image ?? null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,7 +62,7 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
 
   function clearImage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
-    setImagePreview(mode === "edit" ? null : null);
+    setImagePreview(null);
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -72,12 +70,10 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
     setFieldErrors({});
     setFormError(null);
 
-    // Passed straight through to the Server Action as FormData (not a
-    // plain object) — that's what lets the picked File actually cross the
-    // client/server boundary along with the rest of the fields.
     const formData = new FormData(e.currentTarget);
     formData.set("parentCategoryId", parentCategory === "none" ? "" : parentCategory);
     formData.set("status", status);
+    formData.set("isFeatured", String(isFeatured));
     if (mode === "edit") formData.set("id", category!.id);
 
     startTransition(async () => {
@@ -110,7 +106,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             </Alert>
           )}
 
-          {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
             <Input
@@ -126,7 +121,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Slug */}
           <div className="space-y-2">
             <Label htmlFor="slug">
               Slug <span className="text-muted-foreground font-normal">(optional — auto-generated if blank)</span>
@@ -142,7 +136,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
@@ -157,7 +150,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Image upload */}
           <div className="space-y-2">
             <Label htmlFor="image">Image</Label>
             <div className="flex items-start gap-4">
@@ -203,7 +195,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Parent Category */}
           <div className="space-y-2">
             <Label>Parent Category</Label>
             <Select
@@ -229,8 +220,7 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Status & Sort Order */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={status} onValueChange={(val) => setStatus(val as "active" | "inactive")}>
@@ -259,6 +249,22 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
               {fieldErrors.sortOrder?.[0] && (
                 <p className="text-xs text-destructive">{fieldErrors.sortOrder[0]}</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="isFeatured">Featured</Label>
+              <div className="flex h-8 items-center gap-2">
+                <input
+                  id="isFeatured"
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  className="h-4 w-4 rounded border-input accent-primary"
+                />
+                <span className="text-xs text-muted-foreground">
+                  Show on homepage
+                </span>
+              </div>
             </div>
           </div>
         </CardContent>

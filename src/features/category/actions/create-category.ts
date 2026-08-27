@@ -1,6 +1,6 @@
 "use server";
+import { revalidatePath, revalidateTag } from "next/cache";
 
-import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { slugify } from "@/lib/slugify";
@@ -17,6 +17,7 @@ export async function createCategory(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     await requireAdmin();
+    
   } catch {
     return { success: false, message: "Admin access required" };
   }
@@ -27,6 +28,7 @@ export async function createCategory(
     description: formData.get("description")?.toString() ?? "",
     parentCategoryId: formData.get("parentCategoryId")?.toString() ?? "",
     status: formData.get("status")?.toString() ?? "active",
+    isFeatured: formData.get("isFeatured")?.toString() ?? "false",
     sortOrder: formData.get("sortOrder")?.toString() ?? "0",
   };
 
@@ -40,8 +42,6 @@ export async function createCategory(
   }
   const data = parsed.data;
 
-  // Validate the image BEFORE touching the database or Cloudinary — a
-  // request that was never going to succeed should never trigger an upload.
   const imageFile = getUploadedImageFile(formData);
   if (imageFile) {
     const imageError = validateImageFile(imageFile);
@@ -78,8 +78,6 @@ export async function createCategory(
     }
   }
 
-  // Every precondition above has passed at this point — this is the only
-  // place in the function that talks to Cloudinary.
   let uploaded: { url: string; publicId: string } | null = null;
   if (imageFile) {
     const buffer = Buffer.from(await imageFile.arrayBuffer());
@@ -95,15 +93,15 @@ export async function createCategory(
       imagePublicId: uploaded?.publicId,
       parentCategoryId: data.parentCategoryId || null,
       status: data.status,
+      isFeatured: data.isFeatured,
       sortOrder: data.sortOrder,
     });
 
     revalidatePath("/admin/categories");
+    revalidatePath("/");
+    revalidateTag("categories", "max");
     return { success: true, data: { id: category._id.toString() } };
   } catch {
-    // The image made it to Cloudinary but the DB write failed (race on the
-    // slug unique index, a Mongoose validation error, etc.) — clean up
-    // rather than leave it orphaned.
     if (uploaded) {
       await deleteImageFromCloudinary(uploaded.publicId).catch((err) => {
         console.error("Failed to roll back orphaned Cloudinary upload:", err);

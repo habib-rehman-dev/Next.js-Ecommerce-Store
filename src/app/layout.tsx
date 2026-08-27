@@ -2,7 +2,6 @@ import { Raleway, Geist, Geist_Mono } from "next/font/google";
 import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-// import Header from "@/app/components/Header";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,7 +37,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         className={`${raleway.variable} ${geist.variable} ${geistMono.variable}`}
       >
         <body>
-          {/* <Header /> */}
           {children}
         </body>
       </html>

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { slugify } from "@/lib/slugify";
@@ -28,6 +28,7 @@ export async function updateCategory(
     description: formData.get("description")?.toString() ?? "",
     parentCategoryId: formData.get("parentCategoryId")?.toString() ?? "",
     status: formData.get("status")?.toString() ?? "active",
+    isFeatured: formData.get("isFeatured")?.toString() ?? "false",
     sortOrder: formData.get("sortOrder")?.toString() ?? "0",
   };
 
@@ -41,9 +42,6 @@ export async function updateCategory(
   }
   const { id, ...data } = parsed.data;
 
-  // A new file only shows up here if the admin actually picked a
-  // replacement — leaving the file input untouched means "keep the
-  // existing image", not "delete it".
   const imageFile = getUploadedImageFile(formData);
   if (imageFile) {
     const imageError = validateImageFile(imageFile);
@@ -63,7 +61,6 @@ export async function updateCategory(
     return { success: false, message: "Category not found" };
   }
 
-  // A category can't be its own parent, directly or transitively.
   if (data.parentCategoryId) {
     if (data.parentCategoryId === id) {
       return {
@@ -100,8 +97,6 @@ export async function updateCategory(
     }
   }
 
-  // Every validation/DB precondition above has passed — only now do we
-  // touch Cloudinary, and only if a replacement image was actually sent.
   let uploaded: { url: string; publicId: string } | null = null;
   if (imageFile) {
     const buffer = Buffer.from(await imageFile.arrayBuffer());
@@ -118,6 +113,7 @@ export async function updateCategory(
       parentCategoryId: data.parentCategoryId || null,
     }),
     ...(data.status !== undefined && { status: data.status }),
+    ...(data.isFeatured !== undefined && { isFeatured: data.isFeatured }),
     ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
     ...(uploaded && { image: uploaded.url, imagePublicId: uploaded.publicId }),
   });
@@ -125,9 +121,6 @@ export async function updateCategory(
   try {
     await existing.save();
   } catch {
-    // The new image made it to Cloudinary but the save failed. Roll back
-    // the new upload — the OLD image is still referenced by the untouched
-    // document in the DB, so it must NOT be deleted here.
     if (uploaded) {
       await deleteImageFromCloudinary(uploaded.publicId).catch((err) => {
         console.error("Failed to roll back orphaned Cloudinary upload:", err);
@@ -136,9 +129,6 @@ export async function updateCategory(
     return { success: false, message: "Failed to update category. Please try again." };
   }
 
-  // Only delete the old image once the new one is safely saved. Doing this
-  // before the save (or if the save fails) could leave the category with
-  // no image at all if something went wrong in between.
   if (uploaded && previousImagePublicId) {
     await deleteImageFromCloudinary(previousImagePublicId).catch((err) => {
       console.error("Failed to delete previous category image from Cloudinary:", err);
@@ -146,6 +136,8 @@ export async function updateCategory(
   }
 
   revalidatePath("/admin/categories");
+  revalidatePath("/");
+  revalidateTag("categories", "max");
 
   return { success: true, data: { id } };
 }

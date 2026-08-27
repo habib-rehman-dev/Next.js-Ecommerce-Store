@@ -8,6 +8,7 @@ export interface ICategory {
   imagePublicId?: string;
   parentCategoryId: Types.ObjectId | null;
   status: "active" | "inactive";
+  isFeatured: boolean;
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +23,7 @@ const categorySchema = new Schema<ICategory>(
     imagePublicId: { type: String, default: "" },
     parentCategoryId: { type: Schema.Types.ObjectId, ref: "Category", default: null },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
+    isFeatured: { type: Boolean, default: false },
     sortOrder: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
@@ -29,5 +31,7 @@ const categorySchema = new Schema<ICategory>(
 
 // Used when finding active children of a category
 categorySchema.index({ parentCategoryId: 1, status: 1 });
+// Used by the storefront homepage grid: "show featured, active categories, in sort order"
+categorySchema.index({ isFeatured: 1, status: 1, sortOrder: 1 });
 
 export const Category = models.Category || model<ICategory>("Category", categorySchema);

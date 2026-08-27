@@ -22,7 +22,12 @@ export function CategoryTable({ categories }: { categories: CategoryDTO[] }) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-12 text-center">
         <p className="text-sm text-muted-foreground">No categories found.</p>
-        <Button variant="link" render={<Link href="/admin/categories/new" />} className="mt-2">
+        <Button
+          variant="link"
+          nativeButton={false}
+          render={<Link href="/admin/categories/new" />}
+          className="mt-2"
+        >
           Create your first category
         </Button>
       </div>

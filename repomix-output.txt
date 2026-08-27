@@ -63,6 +63,7 @@ src/
         [[...sign-up]]/
           page.tsx
     (marketing)/
+      layout.tsx
       page.tsx
     admin/
       brands/
@@ -85,6 +86,8 @@ src/
             page.tsx
         new/
           page.tsx
+        page.tsx
+      hero-banners/
         page.tsx
       products/
         [id]/
@@ -120,6 +123,7 @@ src/
       button.tsx
       card.tsx
       collapsible.tsx
+      dialog.tsx
       dropdown-menu.tsx
       input.tsx
       label.tsx
@@ -158,11 +162,13 @@ src/
         update-category.ts
       components/
         CategoryForm.tsx
+        CategoryGridSection.tsx
         CategoryRowActions.tsx
         CategoryTable.tsx
       queries/
         get-categories.ts
         get-category-by-id.ts
+        get-featured-categories.ts
       types.ts
       validation.ts
     coupon/
@@ -177,6 +183,15 @@ src/
         get-coupons.ts
       types.ts
       validation.ts
+    hero/
+      actions/
+        hero-actions.ts
+      components/
+        HeroBannerFormDialog.tsx
+        HeroBannerSection.tsx
+        HeroBannerTable.tsx
+      queries/
+        get-hero-banners.ts
     product/
       actions/
         create-product.ts
@@ -211,6 +226,7 @@ src/
     Cart.ts
     Category.ts
     Coupon.ts
+    HeroBanner.ts
     Order.ts
     Payment.ts
     Product.ts
@@ -233,6 +249,175 @@ tsconfig.json
 ================================================================
 Files
 ================================================================
+
+================
+File: src/app/(marketing)/layout.tsx
+================
+export default function MarketingLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="w-full border rounded-lg p-5">
+      {children}
+    </div>
+  );
+}
+
+================
+File: src/features/category/components/CategoryGridSection.tsx
+================
+import Image from "next/image";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import type { CategoryDTO } from "../types";
+
+type Props = {
+  categories: CategoryDTO[];
+};
+
+export function CategoryGridSection({ categories }: Props) {
+  if (!categories || categories.length === 0) return null;
+
+  return (
+    <section className="space-y-6">
+      <div className="flex items-end justify-between border-b pb-4">
+        <div>
+          <Badge variant="outline" className="mb-2">
+            Categories
+          </Badge>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            Shop by Category
+          </h2>
+        </div>
+        <Button
+          variant="ghost"
+          nativeButton={false}
+          render={<Link href="/products" />}
+          className="gap-1 text-sm font-medium"
+        >
+          View All <ArrowUpRight className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+        {categories.map((category) => (
+          <Link
+            key={category.id}
+            href={`/products?categoryId=${category.id}`}
+            className="group block focus:outline-none"
+          >
+            <Card className="overflow-hidden border bg-card transition-all duration-300 hover:shadow-lg hover:border-primary/50">
+              <CardContent className="p-0">
+                <div className="relative aspect-4/3 w-full overflow-hidden bg-muted">
+                  {category.image ? (
+                    <Image
+                      src={category.image}
+                      alt={category.name}
+                      fill
+                      sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
+                      No image
+                    </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+
+                  <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                    <h3 className="font-semibold text-base sm:text-lg tracking-tight group-hover:underline underline-offset-4">
+                      {category.name}
+                    </h3>
+                    {category.description && (
+                      <p className="text-xs text-zinc-300 line-clamp-1 mt-0.5">
+                        {category.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+================
+File: src/features/category/queries/get-featured-categories.ts
+================
+import "server-only";
+import { unstable_cache } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Category } from "@/models/Category";
+import type { CategoryDTO } from "../types";
+
+function toDTO(c: {
+  _id: { toString(): string };
+  name: string;
+  slug: string;
+  description?: string;
+  image?: string;
+  parentCategoryId: { toString(): string } | null;
+  status: "active" | "inactive";
+  isFeatured?: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): CategoryDTO {
+  return {
+    id: c._id.toString(),
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    image: c.image,
+    parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
+    status: c.status,
+    isFeatured: c.isFeatured ?? false,
+    sortOrder: c.sortOrder,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  };
+}
+
+const getCachedFeaturedCategories = unstable_cache(
+  async (limit: number): Promise<CategoryDTO[]> => {
+    await dbConnect();
+
+    const featured = await Category.find({ isFeatured: true, status: "active" })
+      .sort({ sortOrder: 1, name: 1 })
+      .limit(limit)
+      .lean();
+
+    if (featured.length > 0) {
+      return featured.map(toDTO);
+    }
+
+    const fallback = await Category.find({ status: "active" })
+      .sort({ sortOrder: 1, name: 1 })
+      .limit(limit)
+      .lean();
+
+    return fallback.map(toDTO);
+  },
+  ["featured-categories"],
+  { tags: ["categories"] },
+);
+
+/**
+ * Categories for the storefront homepage grid. Cached and revalidated
+ * via the "categories" tag whenever a category is created/updated/deleted.
+ */
+export async function getFeaturedCategories(limit = 8): Promise<CategoryDTO[]> {
+  return getCachedFeaturedCategories(limit);
+}
 
 ================
 File: .repomix/bundles.json
@@ -525,6 +710,28 @@ export default async function CouponsPage({ searchParams }: Props) {
       </div>
 
       <CouponsTable coupons={coupons} />
+    </div>
+  );
+}
+
+================
+File: src/app/admin/hero-banners/page.tsx
+================
+// src/app/admin/hero-banners/page.tsx
+import { dbConnect } from "@/lib/db/dbConnect";
+import { HeroBanner } from "@/models/HeroBanner";
+import { HeroBannerTable } from "@/features/hero/components/HeroBannerTable";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminHeroBannersPage() {
+  await dbConnect();
+  const rawBanners = await HeroBanner.find({}).sort({ createdAt: -1 }).lean();
+  const banners = JSON.parse(JSON.stringify(rawBanners));
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <HeroBannerTable banners={banners} />
     </div>
   );
 }
@@ -1395,77 +1602,6 @@ File: src/app/typeset.css
   --typeset-size: 1em; /* body font-size */
   --typeset-leading: 1.75; /* line-height */
   --typeset-flow: 1.25em; /* space between blocks */
-}
-
-================
-File: src/components/admin/AppSidebar.tsx
-================
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LayoutDashboard, Layers, Tag, Package, Ticket } from "lucide-react";
-
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-} from "@/components/ui/sidebar";
-
-const navItems = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Categories", href: "/admin/categories", icon: Layers },
-  { label: "Brands", href: "/admin/brands", icon: Tag },
-  { label: "Products", href: "/admin/products", icon: Package },
-  { label: "Coupons", href: "/admin/coupons", icon: Ticket },
-];
-
-export default function AppSidebar() {
-  const pathname = usePathname();
-
-  return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b px-4 py-3 font-semibold">
-        Admin Portal
-      </SidebarHeader>
-
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Management</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      render={<Link href={item.href} />}
-                      isActive={isActive}
-                      tooltip={item.label}
-                    >
-                      <Icon />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarRail />
-    </Sidebar>
-  );
 }
 
 ================
@@ -2546,6 +2682,170 @@ function CollapsibleContent({ ...props }: CollapsiblePrimitive.Panel.Props) {
 }
 
 export { Collapsible, CollapsibleTrigger, CollapsibleContent }
+
+================
+File: src/components/ui/dialog.tsx
+================
+"use client"
+
+import * as React from "react"
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { XIcon } from "lucide-react"
+
+function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+}
+
+function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
+}
+
+function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+}
+
+function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
+}
+
+function DialogOverlay({
+  className,
+  ...props
+}: DialogPrimitive.Backdrop.Props) {
+  return (
+    <DialogPrimitive.Backdrop
+      data-slot="dialog-overlay"
+      className={cn(
+        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: DialogPrimitive.Popup.Props & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Popup
+        data-slot="dialog-content"
+        className={cn(
+          "fixed top-1/2 start-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            render={
+              <Button
+                variant="ghost"
+                className="absolute top-2 end-2"
+                size="icon-sm"
+              />
+            }
+          >
+            <XIcon
+            />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  )
+}
+
+function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cn("flex flex-col gap-2", className)}
+      {...props}
+    />
+  )
+}
+
+function DialogFooter({
+  className,
+  showCloseButton = false,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <div
+      data-slot="dialog-footer"
+      className={cn(
+        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      {showCloseButton && (
+        <DialogPrimitive.Close render={<Button variant="outline" />}>
+          Close
+        </DialogPrimitive.Close>
+      )}
+    </div>
+  )
+}
+
+function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+  return (
+    <DialogPrimitive.Title
+      data-slot="dialog-title"
+      className={cn(
+        "font-heading text-base leading-none font-medium",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DialogDescription({
+  className,
+  ...props
+}: DialogPrimitive.Description.Props) {
+  return (
+    <DialogPrimitive.Description
+      data-slot="dialog-description"
+      className={cn(
+        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+}
 
 ================
 File: src/components/ui/dropdown-menu.tsx
@@ -5460,6 +5760,7 @@ export function CategoryRowActions({ id, name }: { id: string; name: string }) {
 File: src/features/category/queries/get-categories.ts
 ================
 import "server-only";
+
 import { dbConnect } from "@/lib/db/dbConnect";
 import { Category } from "@/models/Category";
 import type { CategoryDTO } from "../types";
@@ -5479,6 +5780,7 @@ export async function getCategories(): Promise<CategoryDTO[]> {
     image: c.image,
     parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
     status: c.status,
+    isFeatured: c.isFeatured ?? false,
     sortOrder: c.sortOrder,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
@@ -5507,6 +5809,7 @@ export async function getCategoryById(id: string): Promise<CategoryDTO | null> {
     image: c.image,
     parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
     status: c.status,
+    isFeatured: c.isFeatured ?? false,
     sortOrder: c.sortOrder,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
@@ -6103,6 +6406,543 @@ export const couponSchema = z.object({
 });
 
 export type CouponFormInput = z.infer<typeof couponSchema>;
+
+================
+File: src/features/hero/actions/hero-actions.ts
+================
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { HeroBanner } from "@/models/HeroBanner";
+
+export interface HeroBannerInput {
+  title: string;
+  subtitle?: string;
+  ctaText: string;
+  ctaLink: string;
+  badgeText?: string;
+  couponCode?: string;
+  imageUrl: string;
+  status: "active" | "draft";
+  priority: number;
+}
+
+export async function createHeroBanner(data: HeroBannerInput) {
+  try {
+    await dbConnect();
+    const newBanner = await HeroBanner.create(data);
+    revalidatePath("/admin/hero-banners");
+    revalidatePath("/");
+    revalidateTag("hero-banners", "max");
+    return { success: true, data: JSON.parse(JSON.stringify(newBanner)) };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to create banner";
+    return { success: false, error: errorMessage };
+  }
+}
+
+export async function updateHeroBanner(id: string, data: Partial<HeroBannerInput>) {
+  try {
+    await dbConnect();
+    const updatedBanner = await HeroBanner.findByIdAndUpdate(id, data, { new: true });
+    revalidatePath("/admin/hero-banners");
+    revalidatePath("/");
+    revalidateTag("hero-banners", "max");
+    return { success: true, data: JSON.parse(JSON.stringify(updatedBanner)) };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to update banner";
+    return { success: false, error: errorMessage };
+  }
+}
+
+export async function deleteHeroBanner(id: string) {
+  try {
+    await dbConnect();
+    await HeroBanner.findByIdAndDelete(id);
+    revalidatePath("/admin/hero-banners");
+    revalidatePath("/");
+    revalidateTag("hero-banners", "max");
+    return { success: true };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to delete banner";
+    return { success: false, error: errorMessage };
+  }
+}
+
+================
+File: src/features/hero/components/HeroBannerFormDialog.tsx
+================
+// src/features/hero/components/HeroBannerFormDialog.tsx
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  createHeroBanner,
+  updateHeroBanner,
+  HeroBannerInput,
+} from "../actions/hero-actions";
+
+export type BannerData = HeroBannerInput & { _id: string };
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialData?: BannerData | null;
+}
+
+const defaultValues: HeroBannerInput = {
+  title: "",
+  subtitle: "",
+  ctaText: "Shop Now",
+  ctaLink: "/products",
+  badgeText: "",
+  couponCode: "",
+  imageUrl: "",
+  status: "active",
+  priority: 0,
+};
+
+export function HeroBannerFormDialog(props: Props) {
+  const formKey = `${props.initialData?._id ?? "new"}-${props.open}`;
+
+  return <HeroBannerFormDialogContent key={formKey} {...props} />;
+}
+
+function HeroBannerFormDialogContent({ open, onOpenChange, initialData }: Props) {
+  const isEditing = !!initialData;
+  const [formData, setFormData] = useState<HeroBannerInput>(
+    initialData ?? defaultValues,
+  );
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "number" ? Number(value) : value,
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const res = isEditing
+      ? await updateHeroBanner(initialData._id, formData)
+      : await createHeroBanner(formData);
+
+    setLoading(false);
+
+    if (res.success) {
+      toast.success(isEditing ? "Banner updated successfully" : "Banner created successfully");
+      onOpenChange(false);
+      setFormData(defaultValues);
+    } else {
+      toast.error(res.error);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? "Edit Hero Banner" : "Create Hero Banner"}</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              name="title"
+              required
+              placeholder="Summer Sale 2026"
+              value={formData.title}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="subtitle">Subtitle</Label>
+            <Input
+              id="subtitle"
+              name="subtitle"
+              placeholder="Up to 50% off select products"
+              value={formData.subtitle || ""}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="ctaText">CTA Text</Label>
+              <Input
+                id="ctaText"
+                name="ctaText"
+                required
+                value={formData.ctaText}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ctaLink">CTA Link</Label>
+              <Input
+                id="ctaLink"
+                name="ctaLink"
+                required
+                value={formData.ctaLink}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="badgeText">Badge Text (Optional)</Label>
+              <Input
+                id="badgeText"
+                name="badgeText"
+                placeholder="Limited Time"
+                value={formData.badgeText || ""}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="couponCode">Coupon Code (Optional)</Label>
+              <Input
+                id="couponCode"
+                name="couponCode"
+                placeholder="SUMMER50"
+                value={formData.couponCode || ""}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="imageUrl">Image URL</Label>
+            <Input
+              id="imageUrl"
+              name="imageUrl"
+              type="url"
+              required
+              placeholder="https://images.unsplash.com/..."
+              value={formData.imageUrl}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(val) => {
+                  if (val !== null) {
+                    setFormData((prev) => ({ ...prev, status: val }));
+                  }
+                }}
+              >
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Input
+                id="priority"
+                name="priority"
+                type="number"
+                value={formData.priority}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
+
+          <Button type="submit" className="w-full mt-4" disabled={loading}>
+            {loading ? "Saving..." : isEditing ? "Update Banner" : "Create Banner"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+================
+File: src/features/hero/components/HeroBannerSection.tsx
+================
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Copy, Check, ArrowRight, Tag } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+export type HeroBannerData = {
+  _id: string;
+  title: string;
+  subtitle?: string;
+  ctaText: string;
+  ctaLink: string;
+  badgeText?: string;
+  couponCode?: string;
+  imageUrl: string;
+};
+
+export function HeroBannerSection({ banner }: { banner: HeroBannerData }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!banner.couponCode) return;
+    navigator.clipboard.writeText(banner.couponCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <section className="relative overflow-hidden rounded-3xl bg-card border shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center p-8 lg:p-12">
+        
+        {/* Left Content */}
+        <div className="lg:col-span-7 space-y-6">
+          {banner.badgeText && (
+            <Badge variant="secondary" className="px-3 py-1 text-xs font-semibold uppercase tracking-wider">
+              {banner.badgeText}
+            </Badge>
+          )}
+
+          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground leading-tight">
+            {banner.title}
+          </h1>
+
+          {banner.subtitle && (
+            <p className="text-lg text-muted-foreground max-w-xl">
+              {banner.subtitle}
+            </p>
+          )}
+
+          {/* Optional Coupon Code Box */}
+          {banner.couponCode && (
+            <div className="inline-flex items-center gap-3 p-2 pr-4 bg-muted/60 border rounded-xl">
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-background rounded-lg text-sm font-mono font-bold text-primary border">
+                <Tag className="h-3.5 w-3.5" />
+                {banner.couponCode}
+              </div>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={handleCopy}
+                className="gap-1 text-xs"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? "Copied" : "Copy Code"}
+              </Button>
+            </div>
+          )}
+
+          {/* Call to Action */}
+          <div>
+            <Button size="lg" className="rounded-xl gap-2 font-medium shadow-md" >
+              <Link href={banner.ctaLink}>
+                {banner.ctaText}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Right Image Display */}
+        <div className="lg:col-span-5 relative aspect-4/3 w-full rounded-2xl overflow-hidden bg-muted">
+          <Image
+            src={banner.imageUrl}
+            alt={banner.title}
+            fill
+            priority
+            className="object-cover"
+          />
+        </div>
+
+      </div>
+    </section>
+  );
+}
+
+================
+File: src/features/hero/components/HeroBannerTable.tsx
+================
+// src/features/hero/components/HeroBannerTable.tsx
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { deleteHeroBanner } from "../actions/hero-actions";
+import { HeroBannerFormDialog, BannerData } from "./HeroBannerFormDialog";
+
+export function HeroBannerTable({ banners }: { banners: BannerData[] }) {
+  const [open, setOpen] = useState(false);
+  const [selectedBanner, setSelectedBanner] = useState<BannerData | null>(null);
+
+  const handleEdit = (banner: BannerData) => {
+    setSelectedBanner(banner);
+    setOpen(true);
+  };
+
+  const handleCreate = () => {
+    setSelectedBanner(null);
+    setOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this banner?")) return;
+    const res = await deleteHeroBanner(id);
+    if (res.success) {
+      toast.success("Banner deleted");
+    } else {
+      toast.error(res.error);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Hero Banners</h2>
+          <p className="text-sm text-muted-foreground">Manage promo banners displayed on the storefront landing page.</p>
+        </div>
+        <Button onClick={handleCreate} className="gap-2">
+          <Plus className="h-4 w-4" /> Add Banner
+        </Button>
+      </div>
+
+      <div className="border rounded-xl bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Preview</TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Coupon</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Priority</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {banners.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  No banners found. Create your first banner to get started.
+                </TableCell>
+              </TableRow>
+            ) : (
+              banners.map((banner) => (
+                <TableRow key={banner._id}>
+                  <TableCell>
+                    <div className="relative h-12 w-20 rounded-md overflow-hidden bg-muted">
+                      <Image src={banner.imageUrl} alt={banner.title} fill className="object-cover" />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium">{banner.title}</div>
+                    <div className="text-xs text-muted-foreground">{banner.ctaLink}</div>
+                  </TableCell>
+                  <TableCell>
+                    {banner.couponCode ? (
+                      <Badge variant="outline" className="font-mono">{banner.couponCode}</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={banner.status === "active" ? "default" : "secondary"}>
+                      {banner.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{banner.priority}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleEdit(banner)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(banner._id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <HeroBannerFormDialog open={open} onOpenChange={setOpen} initialData={selectedBanner} />
+    </div>
+  );
+}
+
+================
+File: src/features/hero/queries/get-hero-banners.ts
+================
+import "server-only";
+import { unstable_cache } from "next/cache";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { HeroBanner } from "@/models/HeroBanner";
+
+const getCachedActiveHeroBanners = unstable_cache(
+  async () => {
+    await dbConnect();
+    const banners = await HeroBanner.find({ status: "active" })
+      .sort({ priority: -1, createdAt: -1 })
+      .lean();
+    return JSON.parse(JSON.stringify(banners));
+  },
+  ["active-hero-banners"],
+  { tags: ["hero-banners"] },
+);
+
+export async function getActiveHeroBanners() {
+  return getCachedActiveHeroBanners();
+}
 
 ================
 File: src/features/product/actions/create-product.ts
@@ -7905,6 +8745,7 @@ export interface ICategory {
   imagePublicId?: string;
   parentCategoryId: Types.ObjectId | null;
   status: "active" | "inactive";
+  isFeatured: boolean;
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
@@ -7919,6 +8760,7 @@ const categorySchema = new Schema<ICategory>(
     imagePublicId: { type: String, default: "" },
     parentCategoryId: { type: Schema.Types.ObjectId, ref: "Category", default: null },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
+    isFeatured: { type: Boolean, default: false },
     sortOrder: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
@@ -7926,8 +8768,47 @@ const categorySchema = new Schema<ICategory>(
 
 // Used when finding active children of a category
 categorySchema.index({ parentCategoryId: 1, status: 1 });
+// Used by the storefront homepage grid: "show featured, active categories, in sort order"
+categorySchema.index({ isFeatured: 1, status: 1, sortOrder: 1 });
 
 export const Category = models.Category || model<ICategory>("Category", categorySchema);
+
+================
+File: src/models/HeroBanner.ts
+================
+// src/models/HeroBanner.ts
+import mongoose, { Schema, Document } from "mongoose";
+
+export interface IHeroBanner extends Document {
+  title: string;
+  subtitle?: string;
+  ctaText: string;
+  ctaLink: string;
+  badgeText?: string;
+  couponCode?: string;
+  imageUrl: string;
+  status: "active" | "draft";
+  priority: number;
+}
+
+const HeroBannerSchema = new Schema<IHeroBanner>(
+  {
+    title: { type: String, required: true },
+    subtitle: { type: String },
+    ctaText: { type: String, required: true, default: "Shop Now" },
+    ctaLink: { type: String, required: true },
+    badgeText: { type: String },
+    couponCode: { type: String },
+    imageUrl: { type: String, required: true },
+    status: { type: String, enum: ["active", "draft"], default: "active" },
+    priority: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+export const HeroBanner =
+  mongoose.models.HeroBanner ||
+  mongoose.model<IHeroBanner>("HeroBanner", HeroBannerSchema);
 
 ================
 File: src/models/Order.ts
@@ -8339,19 +9220,6 @@ const config = {
 export default config;
 
 ================
-File: src/app/(marketing)/page.tsx
-================
-import React from 'react'
-
-const page = () => {
-  return (
-    <div className='p-10'>page</div>
-  )
-}
-
-export default page
-
-================
 File: src/app/admin/categories/page.tsx
 ================
 import Link from "next/link";
@@ -8383,6 +9251,78 @@ export default async function AdminCategoriesPage() {
 
       <CategoryTable categories={categories} />
     </div>
+  );
+}
+
+================
+File: src/components/admin/AppSidebar.tsx
+================
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, Layers, Tag, Package, Ticket , Image } from "lucide-react";
+
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar";
+
+const navItems = [
+  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { label: "Categories", href: "/admin/categories", icon: Layers },
+  { label: "Brands", href: "/admin/brands", icon: Tag },
+  { label: "Products", href: "/admin/products", icon: Package },
+  { label: "Coupons", href: "/admin/coupons", icon: Ticket },
+  { label: "Hero Banner", href: "/admin/hero-banners", icon: Image },
+];
+
+export default function AppSidebar() {
+  const pathname = usePathname();
+
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="border-b px-4 py-3 font-semibold">
+        Admin Portal
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Management</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={<Link href={item.href} />}
+                      isActive={isActive}
+                      tooltip={item.label}
+                    >
+                      <Icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarRail />
+    </Sidebar>
   );
 }
 
@@ -8751,8 +9691,8 @@ export type BrandDTO = IBrand;
 File: src/features/category/actions/create-category.ts
 ================
 "use server";
+import { revalidatePath, revalidateTag } from "next/cache";
 
-import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { slugify } from "@/lib/slugify";
@@ -8769,6 +9709,7 @@ export async function createCategory(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     await requireAdmin();
+    
   } catch {
     return { success: false, message: "Admin access required" };
   }
@@ -8779,6 +9720,7 @@ export async function createCategory(
     description: formData.get("description")?.toString() ?? "",
     parentCategoryId: formData.get("parentCategoryId")?.toString() ?? "",
     status: formData.get("status")?.toString() ?? "active",
+    isFeatured: formData.get("isFeatured")?.toString() ?? "false",
     sortOrder: formData.get("sortOrder")?.toString() ?? "0",
   };
 
@@ -8792,8 +9734,6 @@ export async function createCategory(
   }
   const data = parsed.data;
 
-  // Validate the image BEFORE touching the database or Cloudinary — a
-  // request that was never going to succeed should never trigger an upload.
   const imageFile = getUploadedImageFile(formData);
   if (imageFile) {
     const imageError = validateImageFile(imageFile);
@@ -8830,8 +9770,6 @@ export async function createCategory(
     }
   }
 
-  // Every precondition above has passed at this point — this is the only
-  // place in the function that talks to Cloudinary.
   let uploaded: { url: string; publicId: string } | null = null;
   if (imageFile) {
     const buffer = Buffer.from(await imageFile.arrayBuffer());
@@ -8847,15 +9785,15 @@ export async function createCategory(
       imagePublicId: uploaded?.publicId,
       parentCategoryId: data.parentCategoryId || null,
       status: data.status,
+      isFeatured: data.isFeatured,
       sortOrder: data.sortOrder,
     });
 
     revalidatePath("/admin/categories");
+    revalidatePath("/");
+    revalidateTag("categories", "max");
     return { success: true, data: { id: category._id.toString() } };
   } catch {
-    // The image made it to Cloudinary but the DB write failed (race on the
-    // slug unique index, a Mongoose validation error, etc.) — clean up
-    // rather than leave it orphaned.
     if (uploaded) {
       await deleteImageFromCloudinary(uploaded.publicId).catch((err) => {
         console.error("Failed to roll back orphaned Cloudinary upload:", err);
@@ -8877,6 +9815,7 @@ import { Category } from "@/models/Category";
 import { Product } from "@/models/Product";
 import type { ActionResult } from "@/lib/action-result";
 import { deleteImageFromCloudinary } from "@/lib/cloudinary";
+import { revalidateTag } from "next/cache";
 
 export async function deleteCategory(id: string): Promise<ActionResult> {
   try {
@@ -8924,6 +9863,8 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/categories");
+  revalidatePath("/");
+  revalidateTag("categories", "max");
 
   return { success: true, data: undefined };
 }
@@ -8933,7 +9874,7 @@ File: src/features/category/actions/update-category.ts
 ================
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { slugify } from "@/lib/slugify";
@@ -8961,6 +9902,7 @@ export async function updateCategory(
     description: formData.get("description")?.toString() ?? "",
     parentCategoryId: formData.get("parentCategoryId")?.toString() ?? "",
     status: formData.get("status")?.toString() ?? "active",
+    isFeatured: formData.get("isFeatured")?.toString() ?? "false",
     sortOrder: formData.get("sortOrder")?.toString() ?? "0",
   };
 
@@ -8974,9 +9916,6 @@ export async function updateCategory(
   }
   const { id, ...data } = parsed.data;
 
-  // A new file only shows up here if the admin actually picked a
-  // replacement — leaving the file input untouched means "keep the
-  // existing image", not "delete it".
   const imageFile = getUploadedImageFile(formData);
   if (imageFile) {
     const imageError = validateImageFile(imageFile);
@@ -8996,7 +9935,6 @@ export async function updateCategory(
     return { success: false, message: "Category not found" };
   }
 
-  // A category can't be its own parent, directly or transitively.
   if (data.parentCategoryId) {
     if (data.parentCategoryId === id) {
       return {
@@ -9033,8 +9971,6 @@ export async function updateCategory(
     }
   }
 
-  // Every validation/DB precondition above has passed — only now do we
-  // touch Cloudinary, and only if a replacement image was actually sent.
   let uploaded: { url: string; publicId: string } | null = null;
   if (imageFile) {
     const buffer = Buffer.from(await imageFile.arrayBuffer());
@@ -9051,6 +9987,7 @@ export async function updateCategory(
       parentCategoryId: data.parentCategoryId || null,
     }),
     ...(data.status !== undefined && { status: data.status }),
+    ...(data.isFeatured !== undefined && { isFeatured: data.isFeatured }),
     ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
     ...(uploaded && { image: uploaded.url, imagePublicId: uploaded.publicId }),
   });
@@ -9058,9 +9995,6 @@ export async function updateCategory(
   try {
     await existing.save();
   } catch {
-    // The new image made it to Cloudinary but the save failed. Roll back
-    // the new upload — the OLD image is still referenced by the untouched
-    // document in the DB, so it must NOT be deleted here.
     if (uploaded) {
       await deleteImageFromCloudinary(uploaded.publicId).catch((err) => {
         console.error("Failed to roll back orphaned Cloudinary upload:", err);
@@ -9069,9 +10003,6 @@ export async function updateCategory(
     return { success: false, message: "Failed to update category. Please try again." };
   }
 
-  // Only delete the old image once the new one is safely saved. Doing this
-  // before the save (or if the save fails) could leave the category with
-  // no image at all if something went wrong in between.
   if (uploaded && previousImagePublicId) {
     await deleteImageFromCloudinary(previousImagePublicId).catch((err) => {
       console.error("Failed to delete previous category image from Cloudinary:", err);
@@ -9079,6 +10010,8 @@ export async function updateCategory(
   }
 
   revalidatePath("/admin/categories");
+  revalidatePath("/");
+  revalidateTag("categories", "max");
 
   return { success: true, data: { id } };
 }
@@ -9094,6 +10027,7 @@ export type CategoryDTO = {
   image?: string;
   parentCategoryId: string | null;
   status: "active" | "inactive";
+  isFeatured: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -9102,6 +10036,7 @@ export type CategoryDTO = {
 ================
 File: src/features/category/validation.ts
 ================
+// src/features/category/validation.ts
 import { z } from "zod";
 
 export const createCategorySchema = z.object({
@@ -9116,6 +10051,7 @@ export const createCategorySchema = z.object({
   description: z.string().trim().max(500).optional().or(z.literal("")),
   parentCategoryId: z.string().trim().nullable().optional(),
   status: z.enum(["active", "inactive"]).default("active"),
+  isFeatured: z.coerce.boolean().default(false),
   sortOrder: z.coerce.number().int().min(0).default(0),
 });
 
@@ -9529,6 +10465,30 @@ File: tsconfig.json
 }
 
 ================
+File: src/app/(marketing)/page.tsx
+================
+import { getActiveHeroBanners } from "@/features/hero/queries/get-hero-banners";
+import { HeroBannerSection } from "@/features/hero/components/HeroBannerSection";
+import { getFeaturedCategories } from "@/features/category/queries/get-featured-categories";
+import { CategoryGridSection } from "@/features/category/components/CategoryGridSection";
+
+export default async function MarketingPage() {
+  const [banners, categories] = await Promise.all([
+    getActiveHeroBanners(),
+    getFeaturedCategories(),
+  ]);
+
+  const primaryBanner = banners[0];
+
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-12">
+      {primaryBanner && <HeroBannerSection banner={primaryBanner} />}
+      <CategoryGridSection categories={categories} />
+    </main>
+  );
+}
+
+================
 File: src/app/admin/brands/page.tsx
 ================
 import Link from "next/link";
@@ -9818,7 +10778,12 @@ export function CategoryTable({ categories }: { categories: CategoryDTO[] }) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-12 text-center">
         <p className="text-sm text-muted-foreground">No categories found.</p>
-        <Button variant="link" render={<Link href="/admin/categories/new" />} className="mt-2">
+        <Button
+          variant="link"
+          nativeButton={false}
+          render={<Link href="/admin/categories/new" />}
+          className="mt-2"
+        >
           Create your first category
         </Button>
       </div>
@@ -9921,18 +10886,16 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Controlled states for shadcn Select components (they don't participate
-  // in native form submission, so we read these directly rather than off
-  // the FormData object).
   const [parentCategory, setParentCategory] = useState<string>(
     category?.parentCategoryId ?? "none"
   );
   const [status, setStatus] = useState<"active" | "inactive">(
     category?.status ?? "active"
   );
+  const [isFeatured, setIsFeatured] = useState<boolean>(
+    category?.isFeatured ?? false
+  );
 
-  // Image preview — shows the existing image in edit mode until the admin
-  // picks a replacement, or the newly-picked file's local preview.
   const [imagePreview, setImagePreview] = useState<string | null>(category?.image ?? null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -9944,7 +10907,7 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
 
   function clearImage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
-    setImagePreview(mode === "edit" ? null : null);
+    setImagePreview(null);
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -9952,12 +10915,10 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
     setFieldErrors({});
     setFormError(null);
 
-    // Passed straight through to the Server Action as FormData (not a
-    // plain object) — that's what lets the picked File actually cross the
-    // client/server boundary along with the rest of the fields.
     const formData = new FormData(e.currentTarget);
     formData.set("parentCategoryId", parentCategory === "none" ? "" : parentCategory);
     formData.set("status", status);
+    formData.set("isFeatured", String(isFeatured));
     if (mode === "edit") formData.set("id", category!.id);
 
     startTransition(async () => {
@@ -9990,7 +10951,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             </Alert>
           )}
 
-          {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
             <Input
@@ -10006,7 +10966,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Slug */}
           <div className="space-y-2">
             <Label htmlFor="slug">
               Slug <span className="text-muted-foreground font-normal">(optional — auto-generated if blank)</span>
@@ -10022,7 +10981,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
@@ -10037,7 +10995,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Image upload */}
           <div className="space-y-2">
             <Label htmlFor="image">Image</Label>
             <div className="flex items-start gap-4">
@@ -10083,7 +11040,6 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Parent Category */}
           <div className="space-y-2">
             <Label>Parent Category</Label>
             <Select
@@ -10109,8 +11065,7 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
             )}
           </div>
 
-          {/* Status & Sort Order */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={status} onValueChange={(val) => setStatus(val as "active" | "inactive")}>
@@ -10139,6 +11094,22 @@ export function CategoryForm({ mode, category, parentOptions }: Props) {
               {fieldErrors.sortOrder?.[0] && (
                 <p className="text-xs text-destructive">{fieldErrors.sortOrder[0]}</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="isFeatured">Featured</Label>
+              <div className="flex h-8 items-center gap-2">
+                <input
+                  id="isFeatured"
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  className="h-4 w-4 rounded border-input accent-primary"
+                />
+                <span className="text-xs text-muted-foreground">
+                  Show on homepage
+                </span>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -10175,14 +11146,19 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "res.cloudinary.com",
-      },{
+      },
+      {
         protocol: "http",
         hostname: "res.cloudinary.com",
       },
       {
-        protocol: 'https',
-        hostname: 'plus.unsplash.com', // Add this line for Unsplash Premium
+        protocol: "https",
+        hostname: "plus.unsplash.com", // Add this line for Unsplash Premium
       },
+     {
+  protocol: "https",
+  hostname: "images.unsplash.com",
+},
     ],
   },
 };
@@ -10196,7 +11172,6 @@ import { Raleway, Geist, Geist_Mono } from "next/font/google";
 import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-// import Header from "@/app/components/Header";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -10232,7 +11207,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         className={`${raleway.variable} ${geist.variable} ${geistMono.variable}`}
       >
         <body>
-          {/* <Header /> */}
           {children}
         </body>
       </html>
@@ -10273,6 +11247,7 @@ File: package.json
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
     "shadcn": "^4.19.0",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",
     "zod": "^4.4.3"

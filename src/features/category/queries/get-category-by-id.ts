@@ -17,6 +17,7 @@ export async function getCategoryById(id: string): Promise<CategoryDTO | null> {
     image: c.image,
     parentCategoryId: c.parentCategoryId ? c.parentCategoryId.toString() : null,
     status: c.status,
+    isFeatured: c.isFeatured ?? false,
     sortOrder: c.sortOrder,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
