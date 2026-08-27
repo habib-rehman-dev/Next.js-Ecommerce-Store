@@ -9,15 +9,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Star, StarOff } from "lucide-react";
 import { toggleProductFeatured } from "@/features/product/actions/toggle-featured";
 
 export default async function FeaturedProductsPage() {
   const { products } = await getProducts({ limit: 100 });
-
-  const featuredProducts = products.filter((p) => p.isFeatured);
-  const nonFeaturedProducts = products.filter((p) => !p.isFeatured);
+ 
+  const featuredProducts = products.filter((p : { isFeatured: boolean }) => p.isFeatured);
+  const nonFeaturedProducts = products.filter((p : { isFeatured: boolean }) => !p.isFeatured);
 
   return (
     <div className="space-y-6">
@@ -52,11 +51,11 @@ export default async function FeaturedProductsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                featuredProducts.map((product) => (
+                featuredProducts.map((product: { _id: string; name: string }) => (
                   <TableRow key={product._id}>
                     <TableCell>{product.name}</TableCell>
                     <TableCell className="text-right">
-                      <form action={toggleProductFeatured}>
+                      <form action={async (formData) => { await toggleProductFeatured(formData); }}>
                         <input type="hidden" name="productId" value={product._id} />
                         <input type="hidden" name="featured" value="false" />
                         <Button variant="ghost" size="sm" type="submit">
@@ -94,11 +93,11 @@ export default async function FeaturedProductsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                nonFeaturedProducts.map((product) => (
+                nonFeaturedProducts.map((product: { _id: string; name: string }) => (
                   <TableRow key={product._id}>
                     <TableCell>{product.name}</TableCell>
                     <TableCell className="text-right">
-                      <form action={toggleProductFeatured}>
+                      <form action={async (formData) => { await toggleProductFeatured(formData); }}>
                         <input type="hidden" name="productId" value={product._id} />
                         <input type="hidden" name="featured" value="true" />
                         <Button variant="outline" size="sm" type="submit">
