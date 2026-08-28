@@ -1,8 +1,10 @@
-// src/app/(shop)/products/page.tsx
+// src/app/(marketing)/(shop)/products/page.tsx
 import { getProducts } from "@/features/product/queries/get-products";
 import { getCategories } from "@/features/category/queries/get-categories";
+import { getBrands } from "@/features/brand/queries/get-brands";
 import { ProductCard } from "@/features/product/components/ProductCard";
-import { ProductsFilters } from "@/app/admin/products/ProductsFilters";
+import { CategoryBrandFilterBar } from "@/features/product/components/CategoryBrandFilterBar";
+import { ProductSearchBox } from "@/features/product/components/ProductSearchBox";
 import { ProductsPagination } from "@/app/admin/products/ProductsPagination";
 import { Badge } from "@/components/ui/badge";
 import type { ComponentProps } from "react";
@@ -25,9 +27,9 @@ export default async function ProductsPage({ searchParams }: Props) {
   const brandId = params.brandId || "";
   const limit = Number(params.limit) || 12;
 
-  // Fetch products with filters and categories for the filter dropdown
-  const [categoriesData, { products, pagination }] = await Promise.all([
+  const [categoriesData, brandsData, { products, pagination }] = await Promise.all([
     getCategories(),
+    getBrands(),
     getProducts({
       page,
       search,
@@ -38,10 +40,12 @@ export default async function ProductsPage({ searchParams }: Props) {
     }),
   ]);
 
-  const categories = categoriesData.map((c) => ({
-    _id: c.id,
-    name: c.name,
-  }));
+  const categories = categoriesData
+    .filter((c) => c.status === "active")
+    .map((c) => ({ id: c.id, name: c.name }));
+  const brands = brandsData
+    .filter((b) => b.status === "active")
+    .map((b) => ({ id: b.id, name: b.name }));
 
   const startRecord = (pagination.page - 1) * pagination.limit + 1;
   const endRecord = Math.min(pagination.page * pagination.limit, pagination.total);
@@ -49,22 +53,18 @@ export default async function ProductsPage({ searchParams }: Props) {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">All Products</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Discover our complete collection
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">All Products</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Discover our complete collection
+          </p>
+        </div>
+        <ProductSearchBox defaultValue={search} />
       </div>
 
-      {/* Filters - Reusing admin component with view toggle hidden */}
-      <ProductsFilters
-        search={search}
-        limit={limit}
-        categoryId={categoryId}
-        view="grid"
-        categories={categories}
-        hideViewToggle={true}
-      />
+      {/* Category | Brand pill filters */}
+      <CategoryBrandFilterBar categories={categories} brands={brands} />
 
       {/* Product Count */}
       <div className="flex items-center justify-between">
