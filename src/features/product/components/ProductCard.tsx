@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import type { IProduct } from "../types";
+import { useCart } from "@/features/cart/context/CartProvider";
+import { addToCart } from "@/features/cart/actions/add-to-cart";
+import { toast } from "sonner";
 
 // Type guard to check if category/brand is populated
 function isPopulated(
@@ -33,6 +36,8 @@ export function ProductCard({
 }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const { refreshCart } = useCart();
 
   const primaryImage = product.images?.[0];
   const secondaryImage = product.images?.[1];
@@ -65,6 +70,40 @@ export function ProductCard({
       return formatPrice(lowestPrice);
     }
     return `${formatPrice(lowestPrice)} - ${formatPrice(highestPrice)}`;
+  };
+
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (isOutOfStock || isAddingToCart) return;
+    
+    const firstVariant = product.variants[0];
+    if (!firstVariant) {
+      toast.error("No variant available");
+      return;
+    }
+    
+    setIsAddingToCart(true);
+    
+    try {
+      const result = await addToCart({
+        productId: product._id,
+        variantId: firstVariant._id || "",
+        quantity: 1,
+      });
+      
+      if (result.success) {
+        refreshCart();
+        toast.success("Added to cart!");
+      } else {
+        toast.error(result.message || "Failed to add to cart");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setIsAddingToCart(false);
+    }
   };
 
   // Compact variant for smaller displays
@@ -137,6 +176,7 @@ export function ProductCard({
         className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background transition-all opacity-0 group-hover:opacity-100"
         onClick={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           setIsWishlisted(!isWishlisted);
         }}
       >
@@ -189,6 +229,7 @@ export function ProductCard({
                 className="gap-2 shadow-lg"
                 onClick={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   // Quick view logic here
                 }}
               >
@@ -237,14 +278,20 @@ export function ProductCard({
       <CardFooter className="p-4 pt-0">
         <Button
           className="w-full gap-2 transition-all group-hover:shadow-lg group-hover:shadow-primary/20"
-          disabled={isOutOfStock}
-          onClick={(e) => {
-            e.preventDefault();
-            // Add to cart logic
-          }}
+          disabled={isOutOfStock || isAddingToCart}
+          onClick={handleAddToCart}
         >
-          <ShoppingCart className="h-4 w-4" />
-          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+          {isAddingToCart ? (
+            <>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              Adding...
+            </>
+          ) : (
+            <>
+              <ShoppingCart className="h-4 w-4" />
+              {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+            </>
+          )}
         </Button>
       </CardFooter>
     </Card>

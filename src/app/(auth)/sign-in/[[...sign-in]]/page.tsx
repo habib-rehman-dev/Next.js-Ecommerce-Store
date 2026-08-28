@@ -1,12 +1,9 @@
-import { SignIn } from "@clerk/nextjs"
+import { SignIn } from "@clerk/nextjs";
 
-
-const page = () => {
+export default function SignInPage() {
   return (
     <div className="w-full h-full flex justify-center items-center p-10">
-        <SignIn signUpUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}/>
+      <SignIn signUpUrl="/sign-up" fallbackRedirectUrl="/" />
     </div>
-  )
+  );
 }
-
-export default page

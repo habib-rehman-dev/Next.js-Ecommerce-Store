@@ -34,7 +34,12 @@ const geistMono = Geist_Mono({
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/"
+    >
       <html
         className={`${raleway.variable} ${geist.variable} ${geistMono.variable}`}
       >

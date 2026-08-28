@@ -5,6 +5,7 @@ import { ProductCard } from "@/features/product/components/ProductCard";
 import { ProductsFilters } from "@/app/admin/products/ProductsFilters";
 import { ProductsPagination } from "@/app/admin/products/ProductsPagination";
 import { Badge } from "@/components/ui/badge";
+import type { ComponentProps } from "react";
 
 type Props = {
   searchParams: Promise<{
@@ -90,7 +91,7 @@ export default async function ProductsPage({ searchParams }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {products.map((product) => (
+          {products.map((product: ComponentProps<typeof ProductCard>["product"]) => (
             <ProductCard key={product._id} product={product} />
           ))}
         </div>
