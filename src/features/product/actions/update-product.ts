@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { Product } from "@/models/Product";
 import { productSchema } from "../validation";
@@ -81,6 +81,7 @@ export async function updateProduct(
 
     revalidatePath("/admin/products", "layout");
     revalidatePath(`/admin/products/${id}/edit`, "page");
+    revalidateTag("products", "max");
 
     return {
       success: true,

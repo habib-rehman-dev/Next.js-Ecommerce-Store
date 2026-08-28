@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef, useEffect, useCallback } from "react";
+import { useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Search, Filter, Grid3x3, List } from "lucide-react";
 
@@ -26,40 +26,23 @@ type Props = {
   categoryId: string;
   view: string;
   categories: CategoryOption[];
-  hideViewToggle?: boolean;
+  hideViewToggle?: boolean; // NEW: For storefront usage
 };
 
 export function ProductsFilters({
-  search: initialSearch,
+  search,
   limit,
   categoryId,
   view,
   categories,
-  hideViewToggle = false,
+  hideViewToggle = false, // Default: show view toggle (admin)
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  
-  // Use a ref to track if this is the first render
-  const isMounted = useRef(false);
-  
-  // Local state for search
-  const [searchValue, setSearchValue] = useState(initialSearch);
-  
-  // Debounce timer
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Update local state when URL changes (but only after mount)
-  useEffect(() => {
-    if (isMounted.current) {
-      setSearchValue(initialSearch);
-    }
-    isMounted.current = true;
-  }, [initialSearch]);
-
-  const updateQuery = useCallback((updates: Record<string, string | null>) => {
+  const updateQuery = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
 
     Object.entries(updates).forEach(([key, value]) => {
@@ -70,77 +53,37 @@ export function ProductsFilters({
       }
     });
 
+    // Reset page to 1 on filter/search change
     if (!updates.hasOwnProperty("page")) {
       params.delete("page");
     }
 
-    const newUrl = `${pathname}?${params.toString()}`;
-    
     startTransition(() => {
-      router.replace(newUrl, { scroll: false });
+      router.push(`${pathname}?${params.toString()}`);
     });
-  }, [pathname, router, searchParams]);
-
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchValue(value);
-    
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    
-    debounceTimerRef.current = setTimeout(() => {
-      updateQuery({ search: value || null });
-    }, 500); // Increased debounce to 500ms
-  }, [updateQuery]);
-
-  const handleSearchBlur = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-    if (searchValue !== initialSearch) {
-      updateQuery({ search: searchValue || null });
-    }
-  }, [searchValue, initialSearch, updateQuery]);
-
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
-      updateQuery({ search: searchValue || null });
-    }
-  }, [searchValue, updateQuery]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
+  };
 
   return (
     <Card aria-busy={isPending}>
       <CardContent className="p-4">
         <div className="flex flex-col sm:flex-row gap-4">
+          {/* Search Input - Controlled */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              key="search-input"
               placeholder="Search products or SKUs..."
               className="pl-9"
-              value={searchValue}
+              value={search || ""}
               disabled={isPending}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              onBlur={handleSearchBlur}
-              onKeyDown={handleSearchKeyDown}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateQuery({ search: val });
+              }}
             />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Dynamic Category Selector */}
             <Select
               value={categoryId || "all"}
               disabled={isPending}
@@ -160,6 +103,7 @@ export function ProductsFilters({
               </SelectContent>
             </Select>
 
+            {/* Per Page Limit Selector */}
             <Select
               value={String(limit)}
               disabled={isPending}
@@ -176,6 +120,7 @@ export function ProductsFilters({
               </SelectContent>
             </Select>
 
+            {/* Layout View Switcher - Conditionally hidden for storefront */}
             {!hideViewToggle && (
               <Tabs
                 value={view}

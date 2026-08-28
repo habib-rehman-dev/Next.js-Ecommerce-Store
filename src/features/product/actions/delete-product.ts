@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { Product } from "@/models/Product";
 import { requireAdmin } from "@/lib/auth";
@@ -33,6 +33,7 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
     await Product.findByIdAndDelete(id);
 
     revalidatePath("/admin/products");
+    revalidateTag("products", "max");
 
     return { success: true, data: undefined };
   } catch (error) {

@@ -3,10 +3,13 @@ import { currentUser } from "@clerk/nextjs/server";
 import { Show, SignOutButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { CartTrigger } from "@/features/cart/components/CartTrigger";
+import { getCartItemCount } from "@/features/cart/queries/get-cart-count";
 
 export default async function Header() {
   const user = await currentUser();
   const isAdmin = user?.publicMetadata?.role === "admin";
+  const cartItemCount = user ? await getCartItemCount() : 0;
 
   return (
     <header className="flex justify-end items-center p-4 gap-4 h-16">
@@ -19,6 +22,7 @@ export default async function Header() {
       )}
 
       <Show when="signed-in">
+        <CartTrigger initialCount={cartItemCount} />
         <div className="border px-3 py-1 rounded-lg">
           <SignOutButton />
         </div>

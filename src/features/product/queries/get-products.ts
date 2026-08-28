@@ -1,6 +1,5 @@
-import {dbConnect} from "@/lib/db/dbConnect";
+import { dbConnect } from "@/lib/db/dbConnect";
 import { Product } from "@/models/Product";
-// Ensure models are registered for populate
 import "@/models/Category";
 import "@/models/Brand";
 
@@ -11,6 +10,7 @@ export interface GetProductsParams {
   categoryId?: string;
   brandId?: string;
   status?: string;
+  isFeatured?: boolean;
 }
 
 export async function getProducts({
@@ -20,6 +20,7 @@ export async function getProducts({
   categoryId,
   brandId,
   status,
+  isFeatured,
 }: GetProductsParams = {}) {
   try {
     await dbConnect();
@@ -36,8 +37,9 @@ export async function getProducts({
 
     // Direct match filters
     if (categoryId) query.categoryId = categoryId;
-    if (brandId) query.brandId = brandId;
+    if (brandId) query.brandId = brandId; // ✅ Already supported
     if (status) query.status = status;
+    if (isFeatured !== undefined) query.isFeatured = isFeatured;
 
     const skip = (page - 1) * limit;
 
