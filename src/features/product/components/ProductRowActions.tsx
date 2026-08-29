@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { MoreHorizontal, Edit, Trash2, Loader2 } from "lucide-react";
 
 import { deleteProduct } from "../actions/delete-product";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
