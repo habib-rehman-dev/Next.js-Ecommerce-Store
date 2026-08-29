@@ -5,14 +5,20 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { CartTrigger } from "@/features/cart/components/CartTrigger";
+import { HeaderSearchBox } from "@/features/product/components/HeaderSearchBox";
+import { getCategories } from "@/features/category/queries/get-categories";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronDown, Package } from "lucide-react";
 
-// Add more entries here as new storefront pages come online
-// (Deals, About, etc.) — this list is the single place to wire them up.
 const navLinks = [
   { label: "Home", href: "/" },
   { label: "Products", href: "/products" },
   { label: "Brands", href: "/brands" },
-  { label: "Checkout", href: "/checkout" }
 ];
 
 export default async function Header() {
@@ -25,6 +31,9 @@ export default async function Header() {
   }
 
   const isAdmin = user?.publicMetadata?.role === "admin";
+  const categories = (await getCategories())
+    .filter((c) => c.status === "active")
+    .slice(0, 8);
 
   return (
     <header className="sticky top-0 z-30 -mx-5 -mt-5 mb-6 rounded-t-lg border-b bg-background/80 backdrop-blur-md">
@@ -48,6 +57,34 @@ export default async function Header() {
               {link.label}
             </Link>
           ))}
+
+          {categories.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={(props) => (
+                  <button
+                    {...props}
+                    className="flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    Categories <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              />
+              <DropdownMenuContent align="start">
+                {categories.map((c) => (
+                  <DropdownMenuItem key={c.id}>
+                    <Link
+                      href={`/products?categoryId=${c.id}`}
+                      className="w-full"
+                    >
+                      {c.name}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           {isAdmin && (
             <Show when="signed-in">
               <Link
@@ -60,9 +97,19 @@ export default async function Header() {
           )}
         </nav>
 
+        {/* Search (desktop) */}
+        <div className="hidden md:block">
+          <HeaderSearchBox />
+        </div>
+
         {/* Right side actions */}
         <div className="flex shrink-0 items-center gap-2">
           <Show when="signed-in">
+            <Link href="/orders">
+              <Button variant="ghost" size="icon" aria-label="Your orders">
+                <Package className="h-5 w-5" />
+              </Button>
+            </Link>
             <CartTrigger />
           </Show>
 
@@ -86,7 +133,10 @@ export default async function Header() {
           <Show when="signed-in">
             <div className="flex items-center gap-2 rounded-full border py-1 pl-1 pr-3">
               <Avatar size="sm">
-                <AvatarImage src={user?.imageUrl} alt={user?.firstName ?? "User"} />
+                <AvatarImage
+                  src={user?.imageUrl}
+                  alt={user?.firstName ?? "User"}
+                />
                 <AvatarFallback>{user?.firstName?.[0] ?? "U"}</AvatarFallback>
               </Avatar>
               <span className="hidden text-sm font-medium sm:inline">
@@ -98,6 +148,11 @@ export default async function Header() {
             </div>
           </Show>
         </div>
+      </div>
+
+      {/* Mobile search — full width below the main bar */}
+      <div className="border-t px-5 py-2 md:hidden">
+        <HeaderSearchBox />
       </div>
     </header>
   );

@@ -1,10 +1,15 @@
 // src/features/product/components/ProductCard.tsx
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Heart } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { toast } from "sonner";
+
+import { RatingStars } from "@/features/review/components/RatingStars";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,15 +17,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { IProduct } from "../types";
 import { useCart } from "@/features/cart/context/CartProvider";
 import { addToCart } from "@/features/cart/actions/add-to-cart";
-import { toast } from "sonner";
+import { isProductWishlisted, toggleWishlist } from "@/features/wishlist/actions/wishlist-actions";
 
 type ProductCardProps = {
   product: IProduct;
+  rating?: { average: number; count: number };
   className?: string;
 };
 
-export function ProductCard({ product, className }: ProductCardProps) {
+export function ProductCard({ product, rating, className }: ProductCardProps) {
+  const router = useRouter();
+  const { isSignedIn } = useAuth();
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isCheckingWishlist, setIsCheckingWishlist] = useState(false);
+  const [isTogglingWishlist, setIsTogglingWishlist] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const { refreshCart } = useCart();
 
@@ -29,11 +39,68 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const totalStock = product.variants.reduce((acc, v) => acc + v.stock, 0);
   const isOutOfStock = totalStock === 0;
 
+  useEffect(() => {
+    if (!isSignedIn) {
+      setIsWishlisted(false);
+      setIsCheckingWishlist(false);
+      return;
+    }
+
+    let active = true;
+    setIsCheckingWishlist(true);
+
+    void (async () => {
+      const result = await isProductWishlisted(product._id);
+      if (!active) return;
+
+      if (result.success) {
+        setIsWishlisted(Boolean(result.data));
+      }
+      setIsCheckingWishlist(false);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isSignedIn, product._id]);
+
+  const handleWishlistToggle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!isSignedIn) {
+      toast.error("Please sign in to save products");
+      return;
+    }
+
+    setIsTogglingWishlist(true);
+
+    try {
+      const result = await toggleWishlist({ productId: product._id });
+
+      if (result.success) {
+        setIsWishlisted(Boolean(result.data?.isWishlisted));
+      } else {
+        toast.error(result.message || "Could not update wishlist");
+      }
+    } catch {
+      toast.error("Could not update wishlist");
+    } finally {
+      setIsTogglingWishlist(false);
+    }
+  };
+
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (isOutOfStock || isAddingToCart) return;
+
+    if (!isSignedIn) {
+      toast.error("Please sign in to add items to your cart");
+      router.push("/sign-in");
+      return;
+    }
 
     const firstVariant = product.variants[0];
     if (!firstVariant) {
@@ -67,7 +134,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
     <Card
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-[36px] border border-border/40 bg-[#F2F3F5] p-3.5 shadow-sm transition-all duration-300 hover:shadow-md",
-        className
+        className,
       )}
     >
       {/* Top Image Container */}
@@ -79,26 +146,33 @@ export function ProductCard({ product, className }: ProductCardProps) {
           </Badge>
         </div>
 
-        {/* 3D Heart Wishlist Button */}
         <button
           type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsWishlisted(!isWishlisted);
-          }}
+          aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          disabled={isCheckingWishlist || isTogglingWishlist}
+          onClick={handleWishlistToggle}
           className={cn(
-            "absolute right-3.5 top-3.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow-md backdrop-blur-sm transition-transform active:scale-90",
-            isWishlisted && "bg-white"
+            "absolute right-3.5 top-3.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow-md backdrop-blur-sm transition-transform active:scale-90 disabled:cursor-not-allowed disabled:opacity-60",
+            isWishlisted && "bg-white",
           )}
         >
-          <span className="text-base select-none">
-            {isWishlisted ? "❤️" : "🤍"}
-          </span>
+          {isCheckingWishlist || isTogglingWishlist ? (
+            <Loader2 className="h-4 w-4 animate-spin text-slate-700" />
+          ) : (
+            <Heart
+              className={cn(
+                "h-4 w-4 transition-colors",
+                isWishlisted ? "fill-red-500 text-red-500" : "text-slate-700",
+              )}
+            />
+          )}
         </button>
 
         {/* Image Link */}
-        <Link href={`/products/${product.slug}`} className="block h-full w-full">
+        <Link
+          href={`/products/${product.slug}`}
+          className="block h-full w-full"
+        >
           {primaryImage ? (
             <Image
               src={primaryImage}
@@ -127,6 +201,12 @@ export function ProductCard({ product, className }: ProductCardProps) {
           {product.description ||
             "Lightweight, durable, and built for peak performance every step of the way."}
         </p>
+        {rating && rating.count > 0 && (
+          <div className="flex items-center gap-1.5">
+            <RatingStars value={rating.average} readOnly size="sm" />
+            <span className="text-xs text-slate-500">({rating.count})</span>
+          </div>
+        )}
 
         {/* Price & Action Footer */}
         <div className="mt-3 flex items-center justify-between">

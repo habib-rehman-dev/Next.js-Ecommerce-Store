@@ -3,7 +3,9 @@
 
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { getSuggestedSpecsAction } from "@/features/specification/actions/get-suggested-specs";
+import type { SuggestedSpec } from "@/features/specification/queries/get-specifications-by-category";
+import { useState, useTransition, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -87,7 +89,23 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
   const [status, setStatus] = useState<"active" | "inactive">(
     product?.status ?? "active",
   );
-  
+
+  const [suggestedSpecs, setSuggestedSpecs] = useState<SuggestedSpec[]>([]);
+
+  useEffect(() => {
+    if (!categoryId) {
+      setSuggestedSpecs([]);
+      return;
+    }
+    let cancelled = false;
+    getSuggestedSpecsAction(categoryId).then((specs) => {
+      if (!cancelled) setSuggestedSpecs(specs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryId]);
+
   // NEW: Add isFeatured state
   const [isFeatured, setIsFeatured] = useState<boolean>(
     product?.isFeatured ?? false,
@@ -270,7 +288,8 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
           const attributesRecord: Record<string, string> = {};
           v.attributes.forEach((attr) => {
             if (attr.key.trim() && attr.value.trim()) {
-              attributesRecord[attr.key.trim().toLowerCase()] = attr.value.trim();
+              attributesRecord[attr.key.trim().toLowerCase()] =
+                attr.value.trim();
             }
           });
 
@@ -278,7 +297,9 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
             _id: v._id,
             sku: v.sku.trim().toUpperCase(),
             price: Number(v.price),
-            discountPrice: v.discountPrice ? Number(v.discountPrice) : undefined,
+            discountPrice: v.discountPrice
+              ? Number(v.discountPrice)
+              : undefined,
             stock: Number(v.stock),
             attributes: attributesRecord,
           };
@@ -315,7 +336,9 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
         router.refresh();
       } catch (err: unknown) {
         setFormError(
-          err instanceof Error ? err.message : "Failed to process image uploads."
+          err instanceof Error
+            ? err.message
+            : "Failed to process image uploads.",
         );
       }
     });
@@ -450,23 +473,25 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
                   onClick={() => setIsFeatured(!isFeatured)}
                   className={`
                     relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-                    ${isFeatured ? 'bg-primary' : 'bg-muted'}
+                    ${isFeatured ? "bg-primary" : "bg-muted"}
                   `}
                 >
                   <span
                     className={`
                       inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                      ${isFeatured ? 'translate-x-6' : 'translate-x-1'}
+                      ${isFeatured ? "translate-x-6" : "translate-x-1"}
                     `}
                   />
                 </button>
                 <div className="flex items-center gap-2">
-                  <Star className={`
+                  <Star
+                    className={`
                     h-4 w-4 transition-colors
-                    ${isFeatured ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}
-                  `} />
+                    ${isFeatured ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}
+                  `}
+                  />
                   <span className="text-xs text-muted-foreground">
-                    {isFeatured ? 'Featured' : 'Not Featured'}
+                    {isFeatured ? "Featured" : "Not Featured"}
                   </span>
                 </div>
               </div>
@@ -719,6 +744,37 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
                         </div>
                       ))}
                     </div>
+
+                    {suggestedSpecs.length > 0 && (
+                      <div className="space-y-1.5 rounded-md border border-dashed p-2">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Suggested for this category
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {suggestedSpecs.map((spec) =>
+                            spec.values.map((value) => (
+                              <button
+                                key={`${spec.name}-${value}`}
+                                type="button"
+                                onClick={() => {
+                                  setVariants((prev) => {
+                                    const updated = [...prev];
+                                    updated[vIdx].attributes.push({
+                                      key: spec.name.toLowerCase(),
+                                      value,
+                                    });
+                                    return updated;
+                                  });
+                                }}
+                                className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary hover:text-primary"
+                              >
+                                {spec.name}: {value}
+                              </button>
+                            )),
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

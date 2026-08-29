@@ -6,6 +6,7 @@ import { ProductCard } from "@/features/product/components/ProductCard";
 import { CategoryBrandFilterBar } from "@/features/product/components/CategoryBrandFilterBar";
 import { ProductSearchBox } from "@/features/product/components/ProductSearchBox";
 import { ProductsPagination } from "@/app/admin/products/ProductsPagination";
+import { getRatingSummaries } from "@/features/review/queries/get-rating-summaries";
 import { Badge } from "@/components/ui/badge";
 import type { ComponentProps } from "react";
 
@@ -27,18 +28,19 @@ export default async function ProductsPage({ searchParams }: Props) {
   const brandId = params.brandId || "";
   const limit = Number(params.limit) || 12;
 
-  const [categoriesData, brandsData, { products, pagination }] = await Promise.all([
-    getCategories(),
-    getBrands(),
-    getProducts({
-      page,
-      search,
-      limit,
-      categoryId,
-      brandId,
-      status: "active",
-    }),
-  ]);
+  const [categoriesData, brandsData, { products, pagination }] =
+    await Promise.all([
+      getCategories(),
+      getBrands(),
+      getProducts({
+        page,
+        search,
+        limit,
+        categoryId,
+        brandId,
+        status: "active",
+      }),
+    ]);
 
   const categories = categoriesData
     .filter((c) => c.status === "active")
@@ -48,7 +50,13 @@ export default async function ProductsPage({ searchParams }: Props) {
     .map((b) => ({ id: b.id, name: b.name }));
 
   const startRecord = (pagination.page - 1) * pagination.limit + 1;
-  const endRecord = Math.min(pagination.page * pagination.limit, pagination.total);
+  const endRecord = Math.min(
+    pagination.page * pagination.limit,
+    pagination.total,
+  );
+  const ratingsMap = await getRatingSummaries(
+    products.map((p: ComponentProps<typeof ProductCard>["product"]) => p._id),
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -91,9 +99,11 @@ export default async function ProductsPage({ searchParams }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {products.map((product: ComponentProps<typeof ProductCard>["product"]) => (
-            <ProductCard key={product._id} product={product} />
-          ))}
+          {products.map(
+            (product: ComponentProps<typeof ProductCard>["product"]) => (
+              <ProductCard key={product._id} product={product} rating={ratingsMap[product._id]} />
+            ),
+          )}
         </div>
       )}
 

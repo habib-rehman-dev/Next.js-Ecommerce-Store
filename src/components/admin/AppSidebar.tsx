@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Layers, Tag, Package, Ticket , Image, Mail } from "lucide-react";
 
 import {
   Sidebar,
@@ -16,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { LayoutDashboard, Layers, Tag, Package, Ticket, Image, Mail, ClipboardList, MessageSquare, SlidersHorizontal } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -25,6 +25,9 @@ const navItems = [
   { label: "Coupons", href: "/admin/coupons", icon: Ticket },
   { label: "Hero Banner", href: "/admin/hero-banners", icon: Image },
   { label: "Subscribers", href: "/admin/subscribers", icon: Mail },
+   { label: "Specifications", href: "/admin/specifications", icon: SlidersHorizontal },
+  { label: "Orders", href: "/admin/orders", icon: ClipboardList },
+  { label: "Reviews", href: "/admin/reviews", icon: MessageSquare },
 ];
 
 export default function AppSidebar() {

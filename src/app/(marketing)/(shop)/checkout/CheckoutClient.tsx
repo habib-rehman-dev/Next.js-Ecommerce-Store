@@ -10,8 +10,7 @@ import {
   Plus,
   Loader2,
   Check,
-  ChevronRight,
-  Shield,
+ 
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";

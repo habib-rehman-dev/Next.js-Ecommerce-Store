@@ -32,7 +32,15 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "payment_intent.succeeded": {
         const paymentIntent = event.data.object;
-        console.log(`✅ Payment succeeded: ${paymentIntent.id}`);
+        const payment = await Payment.findOne({ stripePaymentIntentId: paymentIntent.id });
+
+        if (payment?.orderId) {
+          await Order.findByIdAndUpdate(payment.orderId, {
+            status: "processing",
+            paymentStatus: "paid",
+          });
+        }
+
         await Payment.findOneAndUpdate(
           { stripePaymentIntentId: paymentIntent.id },
           {
@@ -40,14 +48,22 @@ export async function POST(req: NextRequest) {
             amount: paymentIntent.amount / 100,
             currency: paymentIntent.currency,
           },
-          { upsert: true }
+          { upsert: true, new: true }
         );
         break;
       }
 
       case "payment_intent.payment_failed": {
         const paymentIntent = event.data.object;
-        console.log(`❌ Payment failed: ${paymentIntent.id}`);
+        const payment = await Payment.findOne({ stripePaymentIntentId: paymentIntent.id });
+
+        if (payment?.orderId) {
+          await Order.findByIdAndUpdate(payment.orderId, {
+            status: "cancelled",
+            paymentStatus: "failed",
+          });
+        }
+
         await Payment.findOneAndUpdate(
           { stripePaymentIntentId: paymentIntent.id },
           { status: "failed" }

@@ -3,6 +3,8 @@
 import { AddToCartButton } from "@/features/cart/components/AddToCartButton";
 import { useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
+import { RatingStars } from "@/features/review/components/RatingStars";
+import type { IRatingSummaryDTO } from "@/features/review/types";
 
 
 import { Button } from "@/components/ui/button";
@@ -19,9 +21,9 @@ function formatPrice(price: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
 }
 
-type Props = { product: IProduct };
+type Props = { product: IProduct; ratingSummary?: IRatingSummaryDTO };
 
-export function ProductDetailView({ product }: Props) {
+export function ProductDetailView({ product, ratingSummary }: Props) {
   const categoryName = isPopulated(product.categoryId) ? product.categoryId.name : "Category";
   const brandName = isPopulated(product.brandId) ? product.brandId.name : "Brand";
 
@@ -83,6 +85,15 @@ export function ProductDetailView({ product }: Props) {
             <span>{categoryName}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{product.name}</h1>
+          {ratingSummary && ratingSummary.count > 0 && (
+            <div className="flex items-center gap-2">
+              <RatingStars value={ratingSummary.average} readOnly size="sm" />
+              <span className="text-sm text-muted-foreground">
+                {ratingSummary.average.toFixed(1)} ({ratingSummary.count} review
+                {ratingSummary.count !== 1 ? "s" : ""})
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-baseline gap-3">

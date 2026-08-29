@@ -1,21 +1,30 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { ShoppingCart, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useCart } from "../context/CartProvider";
-// import { addToCart } from "../actions/cart-actions";
 import { addToCart } from "../actions/add-to-cart";
 
 type Props = { productId: string; variantId: string; quantity: number; disabled?: boolean };
 
 export function AddToCartButton({ productId, variantId, quantity, disabled }: Props) {
+  const router = useRouter();
+  const { isSignedIn } = useAuth();
   const { refreshCart } = useCart();
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
+    if (!isSignedIn) {
+      toast.error("Please sign in to add items to your cart");
+      router.push("/sign-in");
+      return;
+    }
+
     startTransition(async () => {
       const result = await addToCart({ productId, variantId, quantity });
       if (!result.success) {

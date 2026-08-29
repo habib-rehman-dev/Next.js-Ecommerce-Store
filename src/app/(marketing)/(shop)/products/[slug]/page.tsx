@@ -6,6 +6,10 @@ import { getProductBySlug } from "@/features/product/queries/get-product-by-slug
 import { getRelatedProducts } from "@/features/product/queries/get-related-products";
 import { ProductDetailView } from "@/features/product/components/ProductDetailView";
 import { ProductCard } from "@/features/product/components/ProductCard";
+import { getRatingSummary } from "@/features/review/queries/get-rating-summary";
+import { getRatingSummaries } from "@/features/review/queries/get-rating-summaries";
+import { ProductReviewsSection } from "@/features/review/components/ProductReviewsSection";
+
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -24,6 +28,10 @@ export default async function ProductDetailPage({ params }: Props) {
 //   const brandId = isPopulated(product.brandId) ? product.brandId._id : String(product.brandId);
 
   const related = await getRelatedProducts(categoryId, product._id, 4);
+  const [ratingSummary, relatedRatings] = await Promise.all([
+    getRatingSummary(product._id),
+    getRatingSummaries(related.map((p) => p._id)),
+  ]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
@@ -48,14 +56,16 @@ export default async function ProductDetailPage({ params }: Props) {
         <span className="text-foreground">{product.name}</span>
       </nav>
 
-      <ProductDetailView product={product} />
+ 
+<ProductDetailView product={product} ratingSummary={ratingSummary} />
 
+      <ProductReviewsSection productId={product._id} />
       {related.length > 0 && (
         <section className="space-y-6 border-t pt-8">
           <h2 className="text-2xl font-bold tracking-tight">You might also like</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
             {related.map((p) => (
-              <ProductCard key={p._id} product={p} />
+              <ProductCard key={p._id} product={p} rating={relatedRatings[p._id]} />
             ))}
           </div>
         </section>
