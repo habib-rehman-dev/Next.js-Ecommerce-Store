@@ -64,11 +64,20 @@ src/
           page.tsx
     (marketing)/
       (shop)/
+        addresses/
+          page.tsx
         brands/
           page.tsx
         cart/
           CartPageClient.tsx
           page.tsx
+        checkout/
+          CheckoutClient.tsx
+          page.tsx
+        order/
+          confirmation/
+            [id]/
+              page.tsx
         products/
           [slug]/
             page.tsx
@@ -116,6 +125,10 @@ src/
       layout.tsx
       loading.tsx
       page.tsx
+    api/
+      webhooks/
+        stripe/
+          route.ts
     chat/
       page.tsx
     components/
@@ -156,6 +169,19 @@ src/
       tooltip.tsx
     markdownRender.tsx
   features/
+    address/
+      actions/
+        create-address.ts
+        delete-address.ts
+        set-default-address.ts
+        update-address.ts
+      components/
+        AddressForm.tsx
+        AddressList.tsx
+      queries/
+        get-addresses.ts
+      types.ts
+      validation.ts
     brand/
       actions/
         create-brand.ts
@@ -235,6 +261,10 @@ src/
       components/
         NewsletterSection.tsx
       validation.ts
+    payment/
+      actions/
+        confirm-order.ts
+        create-payment-intent.ts
     product/
       actions/
         create-product.ts
@@ -277,6 +307,7 @@ src/
     env.ts
     image-validation.ts
     slugify.ts
+    stripe.ts
     utils.ts
   models/
     Address.ts
@@ -308,173 +339,6 @@ tsconfig.json
 ================================================================
 Files
 ================================================================
-
-================
-File: src/features/product/components/CategoryBrandFilterBar.tsx
-================
-// src/features/product/components/CategoryBrandFilterBar.tsx
-"use client";
-
-import { useTransition } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { cn } from "@/lib/utils";
-
-type Option = { id: string; name: string };
-
-type Props = {
-  categories: Option[];
-  brands: Option[];
-};
-
-/**
- * Pill-style filter row: "All Products | <categories> | <brands>".
- * Clicking a category sets ?categoryId=, clicking a brand sets ?brandId=.
- * Both can be active at once (e.g. "Shoes" + "Nike"), since getProducts()
- * already ANDs categoryId and brandId together.
- */
-export function CategoryBrandFilterBar({ categories, brands }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-
-  const activeCategoryId = searchParams.get("categoryId") ?? "";
-  const activeBrandId = searchParams.get("brandId") ?? "";
-
-  function updateQuery(updates: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    });
-    params.delete("page");
-
-    startTransition(() => {
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    });
-  }
-
-  function toggleCategory(id: string) {
-    updateQuery({ categoryId: activeCategoryId === id ? null : id });
-  }
-
-  function toggleBrand(id: string) {
-    updateQuery({ brandId: activeBrandId === id ? null : id });
-  }
-
-  function clearAll() {
-    updateQuery({ categoryId: null, brandId: null });
-  }
-
-  const hasActiveFilter = Boolean(activeCategoryId || activeBrandId);
-
-  return (
-    <div
-      aria-busy={isPending}
-      className={cn(
-        "flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 scrollbar-none",
-        isPending && "opacity-70"
-      )}
-    >
-      <Pill active={!hasActiveFilter} onClick={clearAll}>
-        All Products
-      </Pill>
-
-      {categories.map((c) => (
-        <Pill
-          key={c.id}
-          active={activeCategoryId === c.id}
-          onClick={() => toggleCategory(c.id)}
-        >
-          {c.name}
-        </Pill>
-      ))}
-
-      {categories.length > 0 && brands.length > 0 && (
-        <span className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
-      )}
-
-      {brands.map((b) => (
-        <Pill key={b.id} active={activeBrandId === b.id} onClick={() => toggleBrand(b.id)}>
-          {b.name}
-        </Pill>
-      ))}
-    </div>
-  );
-}
-
-function Pill({
-  active,
-  onClick,
-  children,
-}: {
-  active?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-        active
-          ? "bg-foreground text-background"
-          : "bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-================
-File: src/features/product/components/ProductSearchBox.tsx
-================
-// src/features/product/components/ProductSearchBox.tsx
-"use client";
-
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-
-export function ProductSearchBox({ defaultValue }: { defaultValue: string }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [value, setValue] = useState(defaultValue);
-  const [, startTransition] = useTransition();
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => setValue(defaultValue), [defaultValue]);
-
-  function handleChange(next: string) {
-    setValue(next);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next) params.set("search", next);
-      else params.delete("search");
-      params.delete("page");
-      startTransition(() =>
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-      );
-    }, 400);
-  }
-
-  return (
-    <div className="relative w-full sm:w-72">
-      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        placeholder="Search products..."
-        className="pl-9"
-        value={value}
-        onChange={(e) => handleChange(e.target.value)}
-      />
-    </div>
-  );
-}
 
 ================
 File: .repomix/bundles.json
@@ -526,6 +390,34 @@ File: public/vercel.svg
 File: public/window.svg
 ================
 <svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+
+================
+File: src/app/(marketing)/(shop)/addresses/page.tsx
+================
+// src/app/(marketing)/(shop)/addresses/page.tsx
+import { redirect } from "next/navigation";
+
+import { requireAuth } from "@/lib/auth";
+import { getAddresses } from "@/features/address/queries/get-addresses";
+import { AddressList } from "@/features/address/components/AddressList";
+
+export const dynamic = "force-dynamic";
+
+export default async function AddressesPage() {
+  try {
+    await requireAuth();
+  } catch {
+    redirect("/sign-in");
+  }
+
+  const addresses = await getAddresses();
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <AddressList addresses={addresses} />
+    </div>
+  );
+}
 
 ================
 File: src/app/(marketing)/(shop)/brands/page.tsx
@@ -932,6 +824,766 @@ export default async function CartPage() {
 }
 
 ================
+File: src/app/(marketing)/(shop)/checkout/CheckoutClient.tsx
+================
+// src/app/(marketing)/(shop)/checkout/CheckoutClient.tsx
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import {
+  CreditCard,
+  MapPin,
+  Plus,
+  Loader2,
+  Check,
+  ChevronRight,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+import { createPaymentIntent } from "@/features/payment/actions/create-payment-intent";
+import { confirmOrder } from "@/features/payment/actions/confirm-order";
+import { createAddress } from "@/features/address/actions/create-address";
+import { AddressInput } from "@/features/address/validation";
+import type { ICartDTO } from "@/features/cart/types";
+import type { IAddressDTO } from "@/features/address/types";
+
+// Initialize Stripe
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+
+// Format price
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(price);
+}
+
+type Props = {
+  cart: ICartDTO;
+  addresses: IAddressDTO[];
+};
+
+function CheckoutForm({ cart, addresses }: Props) {
+  const router = useRouter();
+  const stripe = useStripe();
+  const elements = useElements();
+
+  const [selectedAddressId, setSelectedAddressId] = useState<string>(
+    addresses.find((a) => a.isDefault)?.id || addresses[0]?.id || ""
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [showAddressForm, setShowAddressForm] = useState(false);
+
+  // Address form state
+  const [newAddress, setNewAddress] = useState<AddressInput>({
+    fullName: "",
+    phone: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "US",
+    isDefault: false,
+  });
+
+  // Coupon state
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+
+  const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+  const subtotal = cart.subtotal;
+  const shipping = 0;
+  const total = subtotal + shipping;
+
+  const handlePlaceOrder = async () => {
+    if (!stripe || !elements) {
+      toast.error("Payment system not ready");
+      return;
+    }
+
+    if (!selectedAddressId) {
+      toast.error("Please select a shipping address");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // 1. Create Payment Intent
+      const paymentIntentResult = await createPaymentIntent(shipping);
+      if (!paymentIntentResult.success) {
+        toast.error(paymentIntentResult.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Confirm payment with Stripe
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) {
+        toast.error("Payment form not ready");
+        setIsLoading(false);
+        return;
+      }
+
+      const { error, paymentIntent } = await stripe.confirmCardPayment(
+        paymentIntentResult.data!.clientSecret,
+        {
+          payment_method: {
+            card: cardElement,
+            billing_details: {
+              name: selectedAddress?.fullName || "Customer",
+            },
+          },
+        }
+      );
+
+      if (error) {
+        toast.error(error.message || "Payment failed");
+        setIsLoading(false);
+        return;
+      }
+
+      if (paymentIntent?.status === "succeeded") {
+        // 3. Confirm order in database
+        const orderResult = await confirmOrder({
+          paymentIntentId: paymentIntent.id,
+          shippingAddressId: selectedAddressId,
+          couponCode: appliedCoupon || undefined,
+        });
+
+        if (!orderResult.success) {
+          toast.error(orderResult.message);
+          setIsLoading(false);
+          return;
+        }
+
+        toast.success("Order placed successfully!");
+        router.push(`/order/confirmation/${orderResult.data!.orderId}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData();
+    Object.entries(newAddress).forEach(([key, value]) => {
+      formData.append(key, String(value));
+    });
+
+    const result = await createAddress(formData);
+    if (result.success) {
+      toast.success("Address saved");
+      setShowAddressForm(false);
+      router.refresh();
+    } else {
+      toast.error(result.message);
+    }
+  };
+
+  if (addresses.length === 0 && !showAddressForm) {
+    return (
+      <div className="text-center py-12">
+        <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-semibold">No Address Found</h3>
+        <p className="text-sm text-muted-foreground mt-2">
+          Please add a shipping address to continue
+        </p>
+        <Button className="mt-4" onClick={() => setShowAddressForm(true)}>
+          <Plus className="mr-2 h-4 w-4" /> Add Address
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Left Column: Address + Payment */}
+      <div className="lg:col-span-2 space-y-6">
+        {/* Address Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MapPin className="h-5 w-5 text-primary" />
+              Shipping Address
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {showAddressForm ? (
+              <form onSubmit={handleCreateAddress} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Full Name</Label>
+                    <Input
+                      required
+                      value={newAddress.fullName}
+                      onChange={(e) =>
+                        setNewAddress({ ...newAddress, fullName: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Phone</Label>
+                    <Input
+                      required
+                      value={newAddress.phone}
+                      onChange={(e) =>
+                        setNewAddress({ ...newAddress, phone: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Address Line 1</Label>
+                  <Input
+                    required
+                    value={newAddress.addressLine1}
+                    onChange={(e) =>
+                      setNewAddress({ ...newAddress, addressLine1: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div>
+                  <Label>Address Line 2 (Optional)</Label>
+                  <Input
+                    value={newAddress.addressLine2}
+                    onChange={(e) =>
+                      setNewAddress({ ...newAddress, addressLine2: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <Label>City</Label>
+                    <Input
+                      required
+                      value={newAddress.city}
+                      onChange={(e) =>
+                        setNewAddress({ ...newAddress, city: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>State</Label>
+                    <Input
+                      required
+                      value={newAddress.state}
+                      onChange={(e) =>
+                        setNewAddress({ ...newAddress, state: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Postal Code</Label>
+                    <Input
+                      required
+                      value={newAddress.postalCode}
+                      onChange={(e) =>
+                        setNewAddress({ ...newAddress, postalCode: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Country</Label>
+                  <Input
+                    required
+                    value={newAddress.country}
+                    onChange={(e) =>
+                      setNewAddress({ ...newAddress, country: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isDefault"
+                    checked={newAddress.isDefault}
+                    onChange={(e) =>
+                      setNewAddress({ ...newAddress, isDefault: e.target.checked })
+                    }
+                  />
+                  <Label htmlFor="isDefault" className="text-sm">
+                    Set as default address
+                  </Label>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button type="submit">Save Address</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAddressForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <Select
+                  value={selectedAddressId}
+                  onValueChange={(value) => {
+                    if (value) setSelectedAddressId(value);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select shipping address" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {addresses.map((addr) => (
+                      <SelectItem key={addr.id} value={addr.id}>
+                        {addr.fullName} - {addr.addressLine1}, {addr.city}
+                        {addr.isDefault && (
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            Default
+                          </Badge>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddressForm(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Add New Address
+                </Button>
+
+                {selectedAddress && (
+                  <div className="mt-2 p-3 bg-muted/30 rounded-lg text-sm">
+                    <p className="font-medium">{selectedAddress.fullName}</p>
+                    <p className="text-muted-foreground">
+                      {selectedAddress.addressLine1}
+                      {selectedAddress.addressLine2 && `, ${selectedAddress.addressLine2}`}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {selectedAddress.city}, {selectedAddress.state}{" "}
+                      {selectedAddress.postalCode}
+                    </p>
+                    <p className="text-muted-foreground">{selectedAddress.country}</p>
+                    <p className="text-muted-foreground">{selectedAddress.phone}</p>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Payment Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CreditCard className="h-5 w-5 text-primary" />
+              Payment Method
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="p-4 border rounded-lg bg-muted/10">
+              <CardElement
+                options={{
+                  style: {
+                    base: {
+                      fontSize: "16px",
+                      color: "#424770",
+                      "::placeholder": { color: "#aab7c4" },
+                    },
+                    invalid: { color: "#9e2146" },
+                  },
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Your payment information is secure and encrypted.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Right Column: Order Summary */}
+      <div className="lg:col-span-1">
+        <Card className="sticky top-24">
+          <CardHeader>
+            <CardTitle className="text-lg">Order Summary</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Items Preview */}
+            <ScrollArea className="max-h-48">
+              <div className="space-y-3">
+                {cart.items.map((item) => (
+                  <div key={`${item.productId}-${item.variantId}`} className="flex gap-3">
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-muted">
+                      {item.productImage && (
+                        <Image
+                          src={item.productImage}
+                          alt={item.productName}
+                          fill
+                          className="object-cover"
+                        />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.productName}</p>
+                      <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                    </div>
+                    <p className="text-sm font-semibold">
+                      {formatPrice((item.discountPrice || item.price) * item.quantity)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+
+            <Separator />
+
+            {/* Coupon Input */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Coupon code"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                disabled={!!appliedCoupon}
+                className="flex-1"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (appliedCoupon) {
+                    setAppliedCoupon(null);
+                    setCouponCode("");
+                  } else if (couponCode) {
+                    setAppliedCoupon(couponCode);
+                  }
+                }}
+              >
+                {appliedCoupon ? "Remove" : "Apply"}
+              </Button>
+            </div>
+
+            {appliedCoupon && (
+              <Badge variant="secondary" className="gap-1">
+                <Check className="h-3 w-3" /> {appliedCoupon} applied
+              </Badge>
+            )}
+
+            <Separator />
+
+            {/* Totals */}
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>{formatPrice(subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Shipping</span>
+                <span className="text-green-600">Free</span>
+              </div>
+              {appliedCoupon && (
+                <div className="flex justify-between text-green-600">
+                  <span>Discount</span>
+                  <span>-{formatPrice(subtotal * 0.1)}</span>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="flex justify-between text-lg font-bold">
+              <span>Total</span>
+              <span>{formatPrice(total)}</span>
+            </div>
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handlePlaceOrder}
+              disabled={isLoading || !selectedAddressId || !stripe}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <ChevronRight className="h-4 w-4 mr-2" />
+              )}
+              {isLoading ? "Processing..." : "Place Order"}
+            </Button>
+
+            <p className="text-xs text-center text-muted-foreground">
+              By placing this order, you agree to our Terms of Service
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// Wrap with Elements provider
+export function CheckoutClient(props: Props) {
+  return (
+    <Elements stripe={stripePromise}>
+      <CheckoutForm {...props} />
+    </Elements>
+  );
+}
+
+================
+File: src/app/(marketing)/(shop)/checkout/page.tsx
+================
+import { redirect } from "next/navigation";
+
+import { requireAuth } from "@/lib/auth";
+import { getCart } from "@/features/cart/queries/get-cart";
+import { getAddresses } from "@/features/address/queries/get-addresses";
+import { CheckoutClient } from "./CheckoutClient";
+
+export const dynamic = "force-dynamic";
+
+export default async function CheckoutPage() {
+	try {
+		await requireAuth();
+	} catch {
+		redirect("/sign-in");
+	}
+
+	const [cart, addresses] = await Promise.all([getCart(), getAddresses()]);
+
+	if (!cart || cart.items.length === 0) {
+		redirect("/cart");
+	}
+
+	return <CheckoutClient cart={cart} addresses={addresses} />;
+}
+
+================
+File: src/app/(marketing)/(shop)/order/confirmation/[id]/page.tsx
+================
+// src/app/(marketing)/(shop)/order/confirmation/[id]/page.tsx
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { CheckCircle, Package, Truck, Calendar, ArrowLeft } from "lucide-react";
+
+import { requireAuth } from "@/lib/auth";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Order } from "@/models/Order";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(price);
+}
+
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+type OrderItem = {
+  productName: string;
+  sku: string;
+  quantity: number;
+  attributes?: Record<string, unknown>;
+  lineTotal: number;
+};
+
+export default async function OrderConfirmationPage({ params }: Props) {
+  const { id } = await params;
+  const userId = await requireAuth();
+  await dbConnect();
+
+  const order = await Order.findOne({ _id: id, userId }).lean();
+
+  if (!order) {
+    notFound();
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Success Header */}
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+          <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+        </div>
+        <h1 className="text-2xl font-bold">Order Confirmed! 🎉</h1>
+        <p className="text-muted-foreground mt-2">
+          Thank you for your purchase. We&apos;ll send you a confirmation email shortly.
+        </p>
+        <Badge variant="outline" className="mt-2 font-mono">
+          Order #{order._id.toString().slice(-8).toUpperCase()}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-4">
+            <Package className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-xs text-muted-foreground">Status</p>
+              <p className="font-medium capitalize">{order.status}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-4">
+            <Truck className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-xs text-muted-foreground">Shipping</p>
+              <p className="font-medium">Processing</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-4">
+            <Calendar className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-xs text-muted-foreground">Order Date</p>
+              <p className="font-medium">
+                {new Date(order.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Order Items */}
+        <div className="md:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Items</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {order.items.map((item: OrderItem, index: number) => (
+                <div key={index} className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium">{item.productName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      SKU: {item.sku} × {item.quantity}
+                    </p>
+                    {Object.keys(item.attributes || {}).length > 0 && (
+                      <div className="flex gap-1 mt-1">
+                        {Object.entries(item.attributes || {}).map(([key, value]) => (
+                          <Badge key={key} variant="outline" className="text-xs">
+                            {key}: {String(value)}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className="font-semibold">{formatPrice(item.lineTotal)}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Order Summary */}
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>{formatPrice(order.subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Shipping</span>
+                <span>{formatPrice(order.shippingFee || 0)}</span>
+              </div>
+              {order.discount > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Discount</span>
+                  <span>-{formatPrice(order.discount)}</span>
+                </div>
+              )}
+              <Separator />
+              <div className="flex justify-between font-bold">
+                <span>Total</span>
+                <span>{formatPrice(order.total)}</span>
+              </div>
+              {order.couponCode && (
+                <Badge variant="secondary" className="w-full justify-center">
+                  Coupon: {order.couponCode}
+                </Badge>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Shipping Address */}
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="text-sm">Shipping Address</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm">
+              <p className="font-medium">{order.shippingAddress.fullName}</p>
+              <p className="text-muted-foreground">
+                {order.shippingAddress.addressLine1}
+                {order.shippingAddress.addressLine2 && (
+                  <>, {order.shippingAddress.addressLine2}</>
+                )}
+              </p>
+              <p className="text-muted-foreground">
+                {order.shippingAddress.city}, {order.shippingAddress.state}{" "}
+                {order.shippingAddress.postalCode}
+              </p>
+              <p className="text-muted-foreground">{order.shippingAddress.country}</p>
+              <p className="text-muted-foreground">{order.shippingAddress.phone}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="mt-6 flex justify-center">
+        <Button >
+          <Link href="/orders">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            View All Orders
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+================
 File: src/app/(marketing)/(shop)/products/[slug]/page.tsx
 ================
 import Link from "next/link";
@@ -1127,118 +1779,6 @@ export default async function FeaturedProductsPage() {
           </Table>
         </div>
       </div>
-    </div>
-  );
-}
-
-================
-File: src/app/(marketing)/(shop)/products/page.tsx
-================
-// src/app/(marketing)/(shop)/products/page.tsx
-import { getProducts } from "@/features/product/queries/get-products";
-import { getCategories } from "@/features/category/queries/get-categories";
-import { getBrands } from "@/features/brand/queries/get-brands";
-import { ProductCard } from "@/features/product/components/ProductCard";
-import { CategoryBrandFilterBar } from "@/features/product/components/CategoryBrandFilterBar";
-import { ProductSearchBox } from "@/features/product/components/ProductSearchBox";
-import { ProductsPagination } from "@/app/admin/products/ProductsPagination";
-import { Badge } from "@/components/ui/badge";
-import type { ComponentProps } from "react";
-
-type Props = {
-  searchParams: Promise<{
-    page?: string;
-    search?: string;
-    categoryId?: string;
-    brandId?: string;
-    limit?: string;
-  }>;
-};
-
-export default async function ProductsPage({ searchParams }: Props) {
-  const params = await searchParams;
-  const page = Number(params.page) || 1;
-  const search = params.search || "";
-  const categoryId = params.categoryId || "";
-  const brandId = params.brandId || "";
-  const limit = Number(params.limit) || 12;
-
-  const [categoriesData, brandsData, { products, pagination }] = await Promise.all([
-    getCategories(),
-    getBrands(),
-    getProducts({
-      page,
-      search,
-      limit,
-      categoryId,
-      brandId,
-      status: "active",
-    }),
-  ]);
-
-  const categories = categoriesData
-    .filter((c) => c.status === "active")
-    .map((c) => ({ id: c.id, name: c.name }));
-  const brands = brandsData
-    .filter((b) => b.status === "active")
-    .map((b) => ({ id: b.id, name: b.name }));
-
-  const startRecord = (pagination.page - 1) * pagination.limit + 1;
-  const endRecord = Math.min(pagination.page * pagination.limit, pagination.total);
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">All Products</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Discover our complete collection
-          </p>
-        </div>
-        <ProductSearchBox defaultValue={search} />
-      </div>
-
-      {/* Category | Brand pill filters */}
-      <CategoryBrandFilterBar categories={categories} brands={brands} />
-
-      {/* Product Count */}
-      <div className="flex items-center justify-between">
-        <Badge variant="secondary" className="px-3 py-1">
-          {pagination.total} product{pagination.total !== 1 ? "s" : ""}
-        </Badge>
-        {pagination.total > 0 && (
-          <span className="text-sm text-muted-foreground">
-            Showing {startRecord} - {endRecord} of {pagination.total}
-          </span>
-        )}
-      </div>
-
-      {/* Product Grid */}
-      {products.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="rounded-full bg-muted p-4 mb-4">
-            <span className="text-2xl">🔍</span>
-          </div>
-          <h3 className="text-lg font-medium">No products found</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mt-1">
-            Try adjusting your filters or search terms
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {products.map((product: ComponentProps<typeof ProductCard>["product"]) => (
-            <ProductCard key={product._id} product={product} />
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="pt-4 border-t">
-          <ProductsPagination pagination={pagination} />
-        </div>
-      )}
     </div>
   );
 }
@@ -2115,6 +2655,96 @@ export default function AdminLoading() {
       </div>
     </div>
   );
+}
+
+================
+File: src/app/api/webhooks/stripe/route.ts
+================
+// src/app/api/webhooks/stripe/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { stripe } from "@/lib/stripe";
+import { env } from "@/lib/env";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Payment } from "@/models/Payment";
+import { Order } from "@/models/Order";
+
+export async function POST(req: NextRequest) {
+  const body = await req.text();
+  const signature = req.headers.get("stripe-signature")!;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error("Webhook signature verification failed:", err);
+    return NextResponse.json(
+      { error: "Invalid signature" },
+      { status: 400 }
+    );
+  }
+
+  await dbConnect();
+
+  try {
+    switch (event.type) {
+      case "payment_intent.succeeded": {
+        const paymentIntent = event.data.object;
+        console.log(`✅ Payment succeeded: ${paymentIntent.id}`);
+        await Payment.findOneAndUpdate(
+          { stripePaymentIntentId: paymentIntent.id },
+          {
+            status: "succeeded",
+            amount: paymentIntent.amount / 100,
+            currency: paymentIntent.currency,
+          },
+          { upsert: true }
+        );
+        break;
+      }
+
+      case "payment_intent.payment_failed": {
+        const paymentIntent = event.data.object;
+        console.log(`❌ Payment failed: ${paymentIntent.id}`);
+        await Payment.findOneAndUpdate(
+          { stripePaymentIntentId: paymentIntent.id },
+          { status: "failed" }
+        );
+        break;
+      }
+
+      case "charge.refunded": {
+        const charge = event.data.object;
+        const paymentIntentId = charge.payment_intent;
+        if (paymentIntentId) {
+          const payment = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
+          if (payment) {
+            await Payment.findByIdAndUpdate(payment._id, { status: "refunded" });
+            await Order.findByIdAndUpdate(payment.orderId, {
+              status: "cancelled",
+              paymentStatus: "refunded",
+            });
+          }
+        }
+        break;
+      }
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error("Webhook handler error:", error);
+    return NextResponse.json(
+      { error: "Webhook handler failed" },
+      { status: 500 }
+    );
+  }
 }
 
 ================
@@ -5190,6 +5820,720 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
 }
 
 ================
+File: src/features/address/actions/create-address.ts
+================
+// src/features/address/actions/create-address.ts
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+
+import { requireAuth } from "@/lib/auth";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Address } from "@/models/Address";
+import { actionSuccess, actionError, type ActionResult } from "@/lib/action-result";
+
+import { addressSchema } from "../validation";
+
+export async function createAddress(
+  formData: FormData
+): Promise<ActionResult<{ id: string }>> {
+  let userId: string;
+  try {
+    userId = await requireAuth();
+  } catch {
+    return actionError("Please sign in to manage your addresses");
+  }
+
+  const raw = {
+    fullName: formData.get("fullName")?.toString() ?? "",
+    phone: formData.get("phone")?.toString() ?? "",
+    addressLine1: formData.get("addressLine1")?.toString() ?? "",
+    addressLine2: formData.get("addressLine2")?.toString() ?? "",
+    city: formData.get("city")?.toString() ?? "",
+    state: formData.get("state")?.toString() ?? "",
+    postalCode: formData.get("postalCode")?.toString() ?? "",
+    country: formData.get("country")?.toString() ?? "",
+    isDefault: formData.get("isDefault")?.toString() === "true",
+  };
+
+  const parsed = addressSchema.safeParse(raw);
+  if (!parsed.success) {
+    return actionError("Please fix the errors below", parsed.error.flatten().fieldErrors);
+  }
+  const data = parsed.data;
+
+  await dbConnect();
+
+  try {
+    // A user's very first address is always the default, regardless of the
+    // checkbox — there must never be zero default addresses once one exists.
+    const existingCount = await Address.countDocuments({ userId });
+    const shouldBeDefault = data.isDefault || existingCount === 0;
+
+    if (shouldBeDefault) {
+      await Address.updateMany({ userId, isDefault: true }, { $set: { isDefault: false } });
+    }
+
+    const address = await Address.create({
+      userId,
+      fullName: data.fullName,
+      phone: data.phone,
+      addressLine1: data.addressLine1,
+      addressLine2: data.addressLine2 || undefined,
+      city: data.city,
+      state: data.state,
+      postalCode: data.postalCode,
+      country: data.country,
+      isDefault: shouldBeDefault,
+    });
+
+    revalidatePath("/addresses");
+    revalidateTag("addresses", "max");
+    return actionSuccess({ id: address._id.toString() }, "Address added");
+  } catch (error) {
+    console.error("Failed to create address:", error);
+    return actionError("Failed to save address. Please try again.");
+  }
+}
+
+================
+File: src/features/address/actions/delete-address.ts
+================
+// src/features/address/actions/delete-address.ts
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+
+import { requireAuth } from "@/lib/auth";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Address } from "@/models/Address";
+import { actionSuccess, actionError, type ActionResult } from "@/lib/action-result";
+
+export async function deleteAddress(id: string): Promise<ActionResult> {
+  let userId: string;
+  try {
+    userId = await requireAuth();
+  } catch {
+    return actionError("Please sign in to manage your addresses");
+  }
+
+  if (!id) return actionError("Address id is required");
+
+  await dbConnect();
+
+  const deleted = await Address.findOneAndDelete({ _id: id, userId });
+  if (!deleted) return actionError("Address not found");
+
+  // If the deleted address was the default and others remain, promote the
+  // most recently added one so there's always a default when possible.
+  if (deleted.isDefault) {
+    const fallback = await Address.findOne({ userId }).sort({ createdAt: -1 });
+    if (fallback) {
+      fallback.isDefault = true;
+      await fallback.save();
+    }
+  }
+
+  revalidatePath("/addresses");
+  revalidateTag("addresses", "max");
+  return actionSuccess(undefined, "Address removed");
+}
+
+================
+File: src/features/address/actions/set-default-address.ts
+================
+// src/features/address/actions/set-default-address.ts
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+
+import { requireAuth } from "@/lib/auth";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Address } from "@/models/Address";
+import { actionSuccess, actionError, type ActionResult } from "@/lib/action-result";
+
+export async function setDefaultAddress(id: string): Promise<ActionResult> {
+  let userId: string;
+  try {
+    userId = await requireAuth();
+  } catch {
+    return actionError("Please sign in to manage your addresses");
+  }
+
+  if (!id) return actionError("Address id is required");
+
+  await dbConnect();
+
+  const target = await Address.findOne({ _id: id, userId });
+  if (!target) return actionError("Address not found");
+
+  await Address.updateMany({ userId, isDefault: true }, { $set: { isDefault: false } });
+  target.isDefault = true;
+  await target.save();
+
+  revalidatePath("/addresses");
+  revalidateTag("addresses", "max");
+  return actionSuccess(undefined, "Default address updated");
+}
+
+================
+File: src/features/address/actions/update-address.ts
+================
+// src/features/address/actions/update-address.ts
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+
+import { requireAuth } from "@/lib/auth";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Address } from "@/models/Address";
+import { actionSuccess, actionError, type ActionResult } from "@/lib/action-result";
+
+import { updateAddressSchema } from "../validation";
+
+export async function updateAddress(
+  formData: FormData
+): Promise<ActionResult<{ id: string }>> {
+  let userId: string;
+  try {
+    userId = await requireAuth();
+  } catch {
+    return actionError("Please sign in to manage your addresses");
+  }
+
+  const id = formData.get("id")?.toString() ?? "";
+  if (!id) return actionError("Address id is required");
+
+  await dbConnect();
+
+  // Scope the lookup to this user — prevents editing someone else's address
+  // by guessing an id.
+  const existing = await Address.findOne({ _id: id, userId });
+  if (!existing) return actionError("Address not found");
+
+  const raw = {
+    id,
+    fullName: formData.get("fullName")?.toString() ?? "",
+    phone: formData.get("phone")?.toString() ?? "",
+    addressLine1: formData.get("addressLine1")?.toString() ?? "",
+    addressLine2: formData.get("addressLine2")?.toString() ?? "",
+    city: formData.get("city")?.toString() ?? "",
+    state: formData.get("state")?.toString() ?? "",
+    postalCode: formData.get("postalCode")?.toString() ?? "",
+    country: formData.get("country")?.toString() ?? "",
+    isDefault: formData.get("isDefault")?.toString() === "true",
+  };
+
+  const parsed = updateAddressSchema.safeParse(raw);
+  if (!parsed.success) {
+    return actionError("Please fix the errors below", parsed.error.flatten().fieldErrors);
+  }
+  const { id: _id, ...data } = parsed.data;
+
+  try {
+    if (data.isDefault) {
+      await Address.updateMany(
+        { userId, isDefault: true, _id: { $ne: id } },
+        { $set: { isDefault: false } }
+      );
+    }
+
+    existing.set({
+      ...(data.fullName !== undefined && { fullName: data.fullName }),
+      ...(data.phone !== undefined && { phone: data.phone }),
+      ...(data.addressLine1 !== undefined && { addressLine1: data.addressLine1 }),
+      ...(data.addressLine2 !== undefined && { addressLine2: data.addressLine2 || undefined }),
+      ...(data.city !== undefined && { city: data.city }),
+      ...(data.state !== undefined && { state: data.state }),
+      ...(data.postalCode !== undefined && { postalCode: data.postalCode }),
+      ...(data.country !== undefined && { country: data.country }),
+      ...(data.isDefault !== undefined && { isDefault: data.isDefault }),
+    });
+
+    await existing.save();
+
+    // Guard against ending up with zero default addresses (e.g. the user
+    // unchecked "default" on the address that was the only default).
+    const stillHasDefault = await Address.exists({ userId, isDefault: true });
+    if (!stillHasDefault) {
+      const fallback = await Address.findOne({ userId }).sort({ createdAt: 1 });
+      if (fallback) {
+        fallback.isDefault = true;
+        await fallback.save();
+      }
+    }
+
+    revalidatePath("/addresses");
+    revalidateTag("addresses", "max");
+    return actionSuccess({ id }, "Address updated");
+  } catch (error) {
+    console.error("Failed to update address:", error);
+    return actionError("Failed to update address. Please try again.");
+  }
+}
+
+================
+File: src/features/address/components/AddressForm.tsx
+================
+// src/features/address/components/AddressForm.tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { Loader2, AlertCircle } from "lucide-react";
+
+import { createAddress } from "../actions/create-address";
+import { updateAddress } from "../actions/update-address";
+import type { IAddressDTO } from "../types";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+
+type DialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  address?: IAddressDTO | null;
+};
+
+export function AddressFormDialog({ open, onOpenChange, address }: DialogProps) {
+  const mode = address ? "edit" : "create";
+  // Remount the form whenever the target address or open-state changes so
+  // defaultValue-based fields (and the isDefault checkbox state) reset cleanly.
+  const formKey = `${address?.id ?? "new"}-${open}`;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{mode === "create" ? "Add Address" : "Edit Address"}</DialogTitle>
+        </DialogHeader>
+        <AddressFormBody
+          key={formKey}
+          mode={mode}
+          address={address}
+          onDone={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddressFormBody({
+  mode,
+  address,
+  onDone,
+}: {
+  mode: "create" | "edit";
+  address?: IAddressDTO | null;
+  onDone: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isDefault, setIsDefault] = useState(address?.isDefault ?? false);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setFieldErrors({});
+    setFormError(null);
+
+    const formData = new FormData(e.currentTarget);
+    formData.set("isDefault", String(isDefault));
+    if (mode === "edit" && address) formData.set("id", address.id);
+
+    startTransition(async () => {
+      const result =
+        mode === "create" ? await createAddress(formData) : await updateAddress(formData);
+
+      if (!result.success) {
+        setFormError(result.message);
+        setFieldErrors(result.fieldErrors ?? {});
+        return;
+      }
+
+      onDone();
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {formError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="fullName">Full Name</Label>
+          <Input
+            id="fullName"
+            name="fullName"
+            defaultValue={address?.fullName}
+            required
+            placeholder="Jane Doe"
+          />
+          {fieldErrors.fullName?.[0] && (
+            <p className="text-xs text-destructive">{fieldErrors.fullName[0]}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="phone">Phone</Label>
+          <Input
+            id="phone"
+            name="phone"
+            defaultValue={address?.phone}
+            required
+            placeholder="+1 555 123 4567"
+          />
+          {fieldErrors.phone?.[0] && (
+            <p className="text-xs text-destructive">{fieldErrors.phone[0]}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="addressLine1">Address Line 1</Label>
+        <Input
+          id="addressLine1"
+          name="addressLine1"
+          defaultValue={address?.addressLine1}
+          required
+          placeholder="123 Main St"
+        />
+        {fieldErrors.addressLine1?.[0] && (
+          <p className="text-xs text-destructive">{fieldErrors.addressLine1[0]}</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="addressLine2">
+          Address Line 2{" "}
+          <span className="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <Input
+          id="addressLine2"
+          name="addressLine2"
+          defaultValue={address?.addressLine2}
+          placeholder="Apt, suite, unit, etc."
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="city">City</Label>
+          <Input id="city" name="city" defaultValue={address?.city} required />
+          {fieldErrors.city?.[0] && (
+            <p className="text-xs text-destructive">{fieldErrors.city[0]}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="state">State</Label>
+          <Input id="state" name="state" defaultValue={address?.state} required />
+          {fieldErrors.state?.[0] && (
+            <p className="text-xs text-destructive">{fieldErrors.state[0]}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="postalCode">Postal Code</Label>
+          <Input
+            id="postalCode"
+            name="postalCode"
+            defaultValue={address?.postalCode}
+            required
+          />
+          {fieldErrors.postalCode?.[0] && (
+            <p className="text-xs text-destructive">{fieldErrors.postalCode[0]}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="country">Country</Label>
+          <Input id="country" name="country" defaultValue={address?.country} required />
+          {fieldErrors.country?.[0] && (
+            <p className="text-xs text-destructive">{fieldErrors.country[0]}</p>
+          )}
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={isDefault}
+          onChange={(e) => setIsDefault(e.target.checked)}
+          className="h-4 w-4 rounded border-input accent-primary"
+        />
+        Set as default shipping address
+      </label>
+
+      <DialogFooter>
+        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
+          {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {isPending ? "Saving…" : mode === "create" ? "Add Address" : "Save Changes"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+================
+File: src/features/address/components/AddressList.tsx
+================
+// src/features/address/components/AddressList.tsx
+"use client";
+
+import { useState, useTransition } from "react";
+import { MapPin, Star, Pencil, Trash2, Plus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+
+import type { IAddressDTO } from "../types";
+import { deleteAddress } from "../actions/delete-address";
+import { setDefaultAddress } from "../actions/set-default-address";
+import { AddressFormDialog } from "./AddressForm";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+export function AddressList({ addresses }: { addresses: IAddressDTO[] }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<IAddressDTO | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleAdd() {
+    setEditingAddress(null);
+    setDialogOpen(true);
+  }
+
+  function handleEdit(address: IAddressDTO) {
+    setEditingAddress(address);
+    setDialogOpen(true);
+  }
+
+  function handleDelete(address: IAddressDTO) {
+    if (!confirm(`Delete the address for "${address.fullName}"? This can't be undone.`)) return;
+
+    setPendingId(address.id);
+    startTransition(async () => {
+      const result = await deleteAddress(address.id);
+      setPendingId(null);
+      if (!result.success) toast.error(result.message);
+      else toast.success(result.message ?? "Address removed");
+    });
+  }
+
+  function handleSetDefault(address: IAddressDTO) {
+    setPendingId(address.id);
+    startTransition(async () => {
+      const result = await setDefaultAddress(address.id);
+      setPendingId(null);
+      if (!result.success) toast.error(result.message);
+      else toast.success(result.message ?? "Default address updated");
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Your Addresses</h2>
+          <p className="text-sm text-muted-foreground">
+            Manage the shipping addresses on your account.
+          </p>
+        </div>
+        <Button onClick={handleAdd} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Add Address
+        </Button>
+      </div>
+
+      {addresses.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-12 text-center">
+          <MapPin className="h-8 w-8 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            You haven&apos;t saved any addresses yet.
+          </p>
+          <Button variant="outline" size="sm" onClick={handleAdd} className="mt-2">
+            Add your first address
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {addresses.map((address) => {
+            const isRowPending = isPending && pendingId === address.id;
+            return (
+              <Card
+                key={address.id}
+                className={cn(address.isDefault && "ring-2 ring-primary/40")}
+              >
+                <CardContent className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{address.fullName}</p>
+                      {address.isDefault && (
+                        <Badge variant="default" className="gap-1">
+                          <Star className="h-3 w-3 fill-current" />
+                          Default
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleEdit(address)}
+                        disabled={isRowPending}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(address)}
+                        disabled={isRowPending}
+                      >
+                        {isRowPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5 text-sm text-muted-foreground">
+                    <p>{address.addressLine1}</p>
+                    {address.addressLine2 && <p>{address.addressLine2}</p>}
+                    <p>
+                      {address.city}, {address.state} {address.postalCode}
+                    </p>
+                    <p>{address.country}</p>
+                    <p className="pt-1">{address.phone}</p>
+                  </div>
+
+                  {!address.isDefault && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSetDefault(address)}
+                      disabled={isRowPending}
+                    >
+                      Set as default
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <AddressFormDialog open={dialogOpen} onOpenChange={setDialogOpen} address={editingAddress} />
+    </div>
+  );
+}
+
+================
+File: src/features/address/queries/get-addresses.ts
+================
+import "server-only";
+import { requireAuth } from "@/lib/auth";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Address } from "@/models/Address";
+import type { IAddressDTO } from "../types";
+
+/**
+ * Addresses are per-user and auth-gated, so this intentionally does NOT use
+ * unstable_cache (same reasoning as features/cart/queries/get-cart.ts) —
+ * caching would either leak between users or require per-user cache keys
+ * for no real benefit on a low-traffic query like this.
+ */
+export async function getAddresses(): Promise<IAddressDTO[]> {
+  const userId = await requireAuth();
+  await dbConnect();
+
+  const addresses = await Address.find({ userId })
+    .sort({ isDefault: -1, createdAt: -1 })
+    .lean();
+
+  return addresses.map((a) => ({
+    id: a._id.toString(),
+    fullName: a.fullName,
+    phone: a.phone,
+    addressLine1: a.addressLine1,
+    addressLine2: a.addressLine2,
+    city: a.city,
+    state: a.state,
+    postalCode: a.postalCode,
+    country: a.country,
+    isDefault: a.isDefault,
+    createdAt: a.createdAt.toISOString(),
+    updatedAt: a.updatedAt.toISOString(),
+  }));
+}
+
+================
+File: src/features/address/types.ts
+================
+export interface IAddressDTO {
+  id: string;
+  fullName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+================
+File: src/features/address/validation.ts
+================
+// src/features/address/validation.ts
+import { z } from "zod";
+
+export const addressSchema = z.object({
+  fullName: z.string().trim().min(2, "Full name must be at least 2 characters").max(100),
+  phone: z.string().trim().min(7, "Enter a valid phone number").max(20),
+  addressLine1: z.string().trim().min(3, "Address is required").max(200),
+  addressLine2: z.string().trim().max(200).optional().or(z.literal("")),
+  city: z.string().trim().min(2, "City is required").max(100),
+  state: z.string().trim().min(2, "State is required").max(100),
+  postalCode: z.string().trim().min(3, "Postal code is required").max(20),
+  country: z.string().trim().min(2, "Country is required").max(100),
+  // NOTE: kept as a real boolean (not z.coerce.boolean()) — coercing the
+  // string "false" would evaluate truthy and always flip this to true.
+  isDefault: z.boolean().default(false),
+});
+
+export const updateAddressSchema = addressSchema.partial().extend({
+  id: z.string().min(1, "id is required"),
+});
+
+export type AddressInput = z.infer<typeof addressSchema>;
+export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;
+
+================
 File: src/features/brand/actions/create-brand.ts
 ================
 "use server";
@@ -7902,6 +9246,171 @@ export const newsletterSchema = z.object({
 export type NewsletterInput = z.infer<typeof newsletterSchema>;
 
 ================
+File: src/features/payment/actions/confirm-order.ts
+================
+// src/features/payment/actions/confirm-order.ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { stripe } from "@/lib/stripe";
+import { requireAuth } from "@/lib/auth";
+import { dbConnect } from "@/lib/db/dbConnect";
+import { Order } from "@/models/Order";
+import { Payment } from "@/models/Payment";
+import { Cart } from "@/models/Cart";
+import { getCart } from "@/features/cart/queries/get-cart";
+import { actionSuccess, actionError, ActionResult } from "@/lib/action-result";
+
+interface ConfirmOrderInput {
+  paymentIntentId: string;
+  shippingAddressId: string;
+  couponCode?: string;
+}
+
+export async function confirmOrder(
+  input: ConfirmOrderInput
+): Promise<ActionResult<{ orderId: string }>> {
+  try {
+    const userId = await requireAuth();
+    await dbConnect();
+
+    // 1. Verify payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      input.paymentIntentId
+    );
+
+    if (paymentIntent.status !== "succeeded") {
+      return actionError("Payment has not been confirmed");
+    }
+
+    // 2. Get cart
+    const cart = await getCart();
+    if (!cart || cart.items.length === 0) {
+      return actionError("Your cart is empty");
+    }
+
+    // 3. Get shipping address
+    const { Address } = await import("@/models/Address");
+    const address = await Address.findOne({
+      _id: input.shippingAddressId,
+      userId,
+    });
+
+    if (!address) {
+      return actionError("Shipping address not found");
+    }
+
+    // 4. Build order items
+    const orderItems = cart.items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId,
+      productName: item.productName,
+      sku: item.sku,
+      attributes: item.attributes || {},
+      unitPrice: item.discountPrice || item.price,
+      quantity: item.quantity,
+      lineTotal: (item.discountPrice || item.price) * item.quantity,
+    }));
+
+    // 5. Calculate totals
+    const subtotal = cart.subtotal;
+    const total = subtotal;
+
+    // 6. Create order
+    const order = await Order.create({
+      userId,
+      items: orderItems,
+      shippingAddress: {
+        fullName: address.fullName,
+        phone: address.phone,
+        addressLine1: address.addressLine1,
+        addressLine2: address.addressLine2,
+        city: address.city,
+        state: address.state,
+        postalCode: address.postalCode,
+        country: address.country,
+      },
+      subtotal,
+      discount: 0,
+      couponCode: input.couponCode,
+      shippingFee: 0,
+      total,
+      currency: "usd",
+      status: "pending",
+      paymentStatus: "paid",
+    });
+
+    // 7. Update payment record
+    await Payment.findOneAndUpdate(
+      { stripePaymentIntentId: paymentIntent.id },
+      {
+        orderId: order._id,
+        userId,
+        amount: total,
+        currency: "usd",
+        status: "succeeded",
+      },
+      { upsert: true }
+    );
+
+    // 8. Clear cart
+    await Cart.findOneAndUpdate({ userId }, { $set: { items: [] } });
+
+    revalidatePath("/orders");
+    return actionSuccess({ orderId: order._id.toString() });
+  } catch (error) {
+    return actionError(
+      error instanceof Error ? error.message : "Failed to confirm order"
+    );
+  }
+}
+
+================
+File: src/features/payment/actions/create-payment-intent.ts
+================
+// src/features/payment/actions/create-payment-intent.ts
+"use server";
+
+import { stripe } from "@/lib/stripe";
+import { requireAuth } from "@/lib/auth";
+import { getCart } from "@/features/cart/queries/get-cart";
+import { actionSuccess, actionError, ActionResult } from "@/lib/action-result";
+
+export async function createPaymentIntent(
+  shippingCost: number = 0
+): Promise<ActionResult<{ clientSecret: string; amount: number }>> {
+  try {
+    const userId = await requireAuth();
+    const cart = await getCart();
+
+    if (!cart || cart.items.length === 0) {
+      return actionError("Your cart is empty");
+    }
+
+    const totalAmount = Math.round((cart.subtotal + shippingCost) * 100);
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: totalAmount,
+      currency: "usd",
+      metadata: {
+        userId,
+        cartId: cart.id,
+        itemCount: String(cart.itemCount),
+      },
+    });
+
+    return actionSuccess({
+      clientSecret: paymentIntent.client_secret!,
+      amount: totalAmount,
+    });
+  } catch (error) {
+    return actionError(
+      error instanceof Error ? error.message : "Failed to create payment intent"
+    );
+  }
+}
+
+================
 File: src/features/product/actions/upload-images.ts
 ================
 "use server";
@@ -7952,173 +9461,121 @@ export async function uploadImagesToCloudinary(
 }
 
 ================
-File: src/features/product/components/FeaturedProductsSection.tsx
+File: src/features/product/components/CategoryBrandFilterBar.tsx
 ================
-// src/features/product/components/FeaturedProductsSection.tsx
+// src/features/product/components/CategoryBrandFilterBar.tsx
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { ChevronLeft, ChevronRight, Sparkles, TrendingUp, Clock } from "lucide-react";
-import { ProductCard } from "./ProductCard";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { IProduct } from "../types";
+import { useTransition } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-type FeaturedProductsSectionProps = {
-  featuredProducts: IProduct[];
-  bestSellingProducts: IProduct[];
-  newArrivals: IProduct[];
-  className?: string;
+type Option = { id: string; name: string };
+
+type Props = {
+  categories: Option[];
+  brands: Option[];
 };
 
-export function FeaturedProductsSection({
-  featuredProducts,
-  bestSellingProducts,
-  newArrivals,
-  className,
-}: FeaturedProductsSectionProps) {
-  const [activeTab, setActiveTab] = useState<"featured" | "bestSelling" | "newArrivals">(
-    "featured"
-  );
+/**
+ * Pill-style filter row: "All Products | <categories> | <brands>".
+ * Clicking a category sets ?categoryId=, clicking a brand sets ?brandId=.
+ * Both can be active at once (e.g. "Shoes" + "Nike"), since getProducts()
+ * already ANDs categoryId and brandId together.
+ */
+export function CategoryBrandFilterBar({ categories, brands }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
 
-  const tabs = [
-    {
-      id: "featured",
-      label: "Featured",
-      icon: Sparkles,
-      products: featuredProducts,
-      count: featuredProducts.length,
-    },
-    {
-      id: "bestSelling",
-      label: "Best Selling",
-      icon: TrendingUp,
-      products: bestSellingProducts,
-      count: bestSellingProducts.length,
-    },
-    {
-      id: "newArrivals",
-      label: "New Arrivals",
-      icon: Clock,
-      products: newArrivals,
-      count: newArrivals.length,
-    },
-  ];
+  const activeCategoryId = searchParams.get("categoryId") ?? "";
+  const activeBrandId = searchParams.get("brandId") ?? "";
 
-  const currentProducts =
-    tabs.find((t) => t.id === activeTab)?.products || [];
+  function updateQuery(updates: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams.toString());
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    });
+    params.delete("page");
 
-  // If no products in any category, don't render
-  if (tabs.every((t) => t.products.length === 0)) {
-    return null;
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    });
   }
 
-  return (
-    <section className={cn("w-full py-8", className)}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6">
-          <div>
-            <Badge variant="outline" className="mb-2">
-              Products
-            </Badge>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Our Collection
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Discover our curated selection of premium products
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            className="gap-1 text-sm font-medium"
-            nativeButton={false}
-            render={<Link href="/products" />}
-          >
-            View All Products
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+  function toggleCategory(id: string) {
+    updateQuery({ categoryId: activeCategoryId === id ? null : id });
+  }
 
-        {/* Tabs */}
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) =>
-            setActiveTab(value as typeof activeTab)
-          }
-          className="w-full"
+  function toggleBrand(id: string) {
+    updateQuery({ brandId: activeBrandId === id ? null : id });
+  }
+
+  function clearAll() {
+    updateQuery({ categoryId: null, brandId: null });
+  }
+
+  const hasActiveFilter = Boolean(activeCategoryId || activeBrandId);
+
+  return (
+    <div
+      aria-busy={isPending}
+      className={cn(
+        "flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 scrollbar-none",
+        isPending && "opacity-70"
+      )}
+    >
+      <Pill active={!hasActiveFilter} onClick={clearAll}>
+        All Products
+      </Pill>
+
+      {categories.map((c) => (
+        <Pill
+          key={c.id}
+          active={activeCategoryId === c.id}
+          onClick={() => toggleCategory(c.id)}
         >
-          <TabsList className="mb-6 bg-muted/50 p-1 w-full sm:w-auto">
-            {tabs.map((tab) => (
-              <TabsTrigger
-                key={tab.id}
-                value={tab.id}
-                className="flex items-center gap-2 data-[state=active]:bg-background"
-              >
-                <tab.icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
-                <span className="sm:hidden">
-                  {tab.id === "featured" ? "⭐" : tab.id === "bestSelling" ? "🔥" : "🆕"}
-                </span>
-                <Badge
-                  variant="secondary"
-                  className="ml-1 h-5 px-1.5 text-[10px] font-normal"
-                >
-                  {tab.count}
-                </Badge>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {c.name}
+        </Pill>
+      ))}
 
-          {tabs.map((tab) => (
-            <TabsContent key={tab.id} value={tab.id} className="mt-0">
-              {tab.products.length > 0 ? (
-                <ProductGrid products={tab.products} />
-              ) : (
-                <EmptyState type={tab.id as typeof activeTab} />
-              )}
-            </TabsContent>
-          ))}
-        </Tabs>
-      </div>
-    </section>
-  );
-}
+      {categories.length > 0 && brands.length > 0 && (
+        <span className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
+      )}
 
-// Product Grid Component
-function ProductGrid({ products }: { products: IProduct[] }) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-      {products.map((product) => (
-        <ProductCard key={product._id} product={product} variant="default" />
+      {brands.map((b) => (
+        <Pill key={b.id} active={activeBrandId === b.id} onClick={() => toggleBrand(b.id)}>
+          {b.name}
+        </Pill>
       ))}
     </div>
   );
 }
 
-// Empty State
-function EmptyState({ type }: { type: "featured" | "bestSelling" | "newArrivals" }) {
-  const messages = {
-    featured: "No featured products available at the moment.",
-    bestSelling: "Best selling products will appear here soon.",
-    newArrivals: "New arrivals will be added shortly.",
-  };
-
+function Pill({
+  active,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="rounded-full bg-muted p-4 mb-4">
-        {type === "featured" && <Sparkles className="h-6 w-6 text-muted-foreground" />}
-        {type === "bestSelling" && <TrendingUp className="h-6 w-6 text-muted-foreground" />}
-        {type === "newArrivals" && <Clock className="h-6 w-6 text-muted-foreground" />}
-      </div>
-      <h3 className="text-lg font-medium">No products yet</h3>
-      <p className="text-sm text-muted-foreground max-w-sm mt-1">
-        {messages[type]}
-      </p>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+        active
+          ? "bg-foreground text-background"
+          : "bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -8552,6 +10009,54 @@ export function ProductRowActions({ productId, productName }: Props) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+================
+File: src/features/product/components/ProductSearchBox.tsx
+================
+// src/features/product/components/ProductSearchBox.tsx
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+
+export function ProductSearchBox({ defaultValue }: { defaultValue: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [value, setValue] = useState(defaultValue);
+  const [, startTransition] = useTransition();
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => setValue(defaultValue), [defaultValue]);
+
+  function handleChange(next: string) {
+    setValue(next);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next) params.set("search", next);
+      else params.delete("search");
+      params.delete("page");
+      startTransition(() =>
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+      );
+    }, 400);
+  }
+
+  return (
+    <div className="relative w-full sm:w-72">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        placeholder="Search products..."
+        className="pl-9"
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+      />
+    </div>
   );
 }
 
@@ -9317,6 +10822,21 @@ export function slugify(input: string): string {
 }
 
 ================
+File: src/lib/stripe.ts
+================
+// src/lib/stripe.ts
+import Stripe from "stripe";
+import { env } from "./env";
+
+export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+  apiVersion: "2026-08-26.dahlia",
+});
+
+export function getStripePublishableKey() {
+  return env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+}
+
+================
 File: src/lib/utils.ts
 ================
 import { clsx, type ClassValue } from "clsx"
@@ -9955,6 +11475,118 @@ export default function SignUpPage() {
   return (
     <div className="w-full h-full flex justify-center items-center p-10">
       <SignUp signInUrl="/sign-in" fallbackRedirectUrl="/" />
+    </div>
+  );
+}
+
+================
+File: src/app/(marketing)/(shop)/products/page.tsx
+================
+// src/app/(marketing)/(shop)/products/page.tsx
+import { getProducts } from "@/features/product/queries/get-products";
+import { getCategories } from "@/features/category/queries/get-categories";
+import { getBrands } from "@/features/brand/queries/get-brands";
+import { ProductCard } from "@/features/product/components/ProductCard";
+import { CategoryBrandFilterBar } from "@/features/product/components/CategoryBrandFilterBar";
+import { ProductSearchBox } from "@/features/product/components/ProductSearchBox";
+import { ProductsPagination } from "@/app/admin/products/ProductsPagination";
+import { Badge } from "@/components/ui/badge";
+import type { ComponentProps } from "react";
+
+type Props = {
+  searchParams: Promise<{
+    page?: string;
+    search?: string;
+    categoryId?: string;
+    brandId?: string;
+    limit?: string;
+  }>;
+};
+
+export default async function ProductsPage({ searchParams }: Props) {
+  const params = await searchParams;
+  const page = Number(params.page) || 1;
+  const search = params.search || "";
+  const categoryId = params.categoryId || "";
+  const brandId = params.brandId || "";
+  const limit = Number(params.limit) || 12;
+
+  const [categoriesData, brandsData, { products, pagination }] = await Promise.all([
+    getCategories(),
+    getBrands(),
+    getProducts({
+      page,
+      search,
+      limit,
+      categoryId,
+      brandId,
+      status: "active",
+    }),
+  ]);
+
+  const categories = categoriesData
+    .filter((c) => c.status === "active")
+    .map((c) => ({ id: c.id, name: c.name }));
+  const brands = brandsData
+    .filter((b) => b.status === "active")
+    .map((b) => ({ id: b.id, name: b.name }));
+
+  const startRecord = (pagination.page - 1) * pagination.limit + 1;
+  const endRecord = Math.min(pagination.page * pagination.limit, pagination.total);
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">All Products</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Discover our complete collection
+          </p>
+        </div>
+        <ProductSearchBox defaultValue={search} />
+      </div>
+
+      {/* Category | Brand pill filters */}
+      <CategoryBrandFilterBar categories={categories} brands={brands} />
+
+      {/* Product Count */}
+      <div className="flex items-center justify-between">
+        <Badge variant="secondary" className="px-3 py-1">
+          {pagination.total} product{pagination.total !== 1 ? "s" : ""}
+        </Badge>
+        {pagination.total > 0 && (
+          <span className="text-sm text-muted-foreground">
+            Showing {startRecord} - {endRecord} of {pagination.total}
+          </span>
+        )}
+      </div>
+
+      {/* Product Grid */}
+      {products.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="rounded-full bg-muted p-4 mb-4">
+            <span className="text-2xl">🔍</span>
+          </div>
+          <h3 className="text-lg font-medium">No products found</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mt-1">
+            Try adjusting your filters or search terms
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+          {products.map((product: ComponentProps<typeof ProductCard>["product"]) => (
+            <ProductCard key={product._id} product={product} />
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div className="pt-4 border-t">
+          <ProductsPagination pagination={pagination} />
+        </div>
+      )}
     </div>
   );
 }
@@ -12284,6 +13916,177 @@ export async function updateProduct(
 }
 
 ================
+File: src/features/product/components/FeaturedProductsSection.tsx
+================
+// src/features/product/components/FeaturedProductsSection.tsx
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, Sparkles, TrendingUp, Clock } from "lucide-react";
+import { ProductCard } from "./ProductCard";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { IProduct } from "../types";
+import { cn } from "@/lib/utils";
+
+type FeaturedProductsSectionProps = {
+  featuredProducts: IProduct[];
+  bestSellingProducts: IProduct[];
+  newArrivals: IProduct[];
+  className?: string;
+};
+
+export function FeaturedProductsSection({
+  featuredProducts,
+  bestSellingProducts,
+  newArrivals,
+  className,
+}: FeaturedProductsSectionProps) {
+  const [activeTab, setActiveTab] = useState<"featured" | "bestSelling" | "newArrivals">(
+    "featured"
+  );
+
+  const tabs = [
+    {
+      id: "featured",
+      label: "Featured",
+      icon: Sparkles,
+      products: featuredProducts,
+      count: featuredProducts.length,
+    },
+    {
+      id: "bestSelling",
+      label: "Best Selling",
+      icon: TrendingUp,
+      products: bestSellingProducts,
+      count: bestSellingProducts.length,
+    },
+    {
+      id: "newArrivals",
+      label: "New Arrivals",
+      icon: Clock,
+      products: newArrivals,
+      count: newArrivals.length,
+    },
+  ];
+
+  const currentProducts =
+    tabs.find((t) => t.id === activeTab)?.products || [];
+
+  // If no products in any category, don't render
+  if (tabs.every((t) => t.products.length === 0)) {
+    return null;
+  }
+
+  return (
+    <section className={cn("w-full py-8", className)}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-6">
+          <div>
+            <Badge variant="outline" className="mb-2">
+              Products
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              Our Collection
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Discover our curated selection of premium products
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            className="gap-1 text-sm font-medium"
+            nativeButton={false}
+            render={<Link href="/products" />}
+          >
+            View All Products
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Tabs */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as typeof activeTab)
+          }
+          className="w-full"
+        >
+          <TabsList className="mb-6 bg-muted/50 p-1 w-full sm:w-auto">
+            {tabs.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="flex items-center gap-2 data-[state=active]:bg-background"
+              >
+                <tab.icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">
+                  {tab.id === "featured" ? "⭐" : tab.id === "bestSelling" ? "🔥" : "🆕"}
+                </span>
+                <Badge
+                  variant="secondary"
+                  className="ml-1 h-5 px-1.5 text-[10px] font-normal"
+                >
+                  {tab.count}
+                </Badge>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {tabs.map((tab) => (
+            <TabsContent key={tab.id} value={tab.id} className="mt-0">
+              {tab.products.length > 0 ? (
+                <ProductGrid products={tab.products} />
+              ) : (
+                <EmptyState type={tab.id as typeof activeTab} />
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      </div>
+    </section>
+  );
+}
+
+// Product Grid Component
+function ProductGrid({ products }: { products: IProduct[] }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+      {products.map((product) => (
+        <ProductCard key={product._id} product={product} />
+      ))}
+    </div>
+  );
+}
+
+// Empty State
+function EmptyState({ type }: { type: "featured" | "bestSelling" | "newArrivals" }) {
+  const messages = {
+    featured: "No featured products available at the moment.",
+    bestSelling: "Best selling products will appear here soon.",
+    newArrivals: "New arrivals will be added shortly.",
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="rounded-full bg-muted p-4 mb-4">
+        {type === "featured" && <Sparkles className="h-6 w-6 text-muted-foreground" />}
+        {type === "bestSelling" && <TrendingUp className="h-6 w-6 text-muted-foreground" />}
+        {type === "newArrivals" && <Clock className="h-6 w-6 text-muted-foreground" />}
+      </div>
+      <h3 className="text-lg font-medium">No products yet</h3>
+      <p className="text-sm text-muted-foreground max-w-sm mt-1">
+        {messages[type]}
+      </p>
+    </div>
+  );
+}
+
+================
 File: src/features/product/components/ProductForm.tsx
 ================
 // src/features/product/components/ProductForm.tsx
@@ -13288,36 +15091,6 @@ export function getPublicIdFromUrl(url: string): string | null {
 }
 
 ================
-File: src/lib/env.ts
-================
-const requiredEnvVars = [
-  "MONGODB_URI",
-  "CLOUDINARY_CLOUD_NAME",
-  "CLOUDINARY_API_KEY",
-  "CLOUDINARY_API_SECRET",
-  // "CLERK_WEBHOOK_SECRET",
-  // "STRIPE_SECRET_KEY",
-  // "STRIPE_WEBHOOK_SECRET",
-] as const;
-
-for (const key of requiredEnvVars) {
-  if (!process.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-}
-
-export const env = {
-  NODE_ENV: process.env.NODE_ENV ?? "development",
-  MONGODB_URI: process.env.MONGODB_URI as string,
-  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME as string,
-  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY as string,
-  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET as string,
-  CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET as string,
-  // STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY as string,
-  // STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET as string,
-};
-
-================
 File: src/models/Category.ts
 ================
 import { Schema, model, models, Types } from "mongoose";
@@ -13656,106 +15429,6 @@ export default function AdminPage() {
         Pick a section from the sidebar to get started.
       </p>
     </div>
-  );
-}
-
-================
-File: src/app/components/Header.tsx
-================
-// src/app/components/Header.tsx
-import { currentUser } from "@clerk/nextjs/server";
-import { Show, SignOutButton } from "@clerk/nextjs";
-import Link from "next/link";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { CartTrigger } from "@/features/cart/components/CartTrigger";
-
-// Add more entries here as new storefront pages come online
-// (Deals, About, etc.) — this list is the single place to wire them up.
-const navLinks = [
-  { label: "Home", href: "/" },
-  { label: "Products", href: "/products" },
-  { label: "Brands", href: "/brands" },
-];
-
-export default async function Header() {
-  const user = await currentUser();
-  const isAdmin = user?.publicMetadata?.role === "admin";
-
-  return (
-    <header className="sticky top-0 z-30 -mx-5 -mt-5 mb-6 rounded-t-lg border-b bg-background/80 backdrop-blur-md">
-      <div className="flex h-16 items-center justify-between gap-4 px-5">
-        {/* Logo */}
-        <Link href="/" className="flex shrink-0 items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground font-heading text-sm font-bold text-background">
-            E
-          </span>
-          <span className="text-lg font-bold tracking-tight">Ecomora</span>
-        </Link>
-
-        {/* Nav */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {link.label}
-            </Link>
-          ))}
-          {isAdmin && (
-            <Show when="signed-in">
-              <Link
-                href="/admin"
-                className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                Admin
-              </Link>
-            </Show>
-          )}
-        </nav>
-
-        {/* Right side actions */}
-        <div className="flex shrink-0 items-center gap-2">
-          <Show when="signed-in">
-            <CartTrigger />
-          </Show>
-
-          <Show when="signed-out">
-            <Button
-              variant="ghost"
-              nativeButton={false}
-              render={<Link href="/sign-in" />}
-            >
-              Sign In
-            </Button>
-            <Button
-              className="rounded-full"
-              nativeButton={false}
-              render={<Link href="/sign-up" />}
-            >
-              Sign Up
-            </Button>
-          </Show>
-
-          <Show when="signed-in">
-            <div className="flex items-center gap-2 rounded-full border py-1 pl-1 pr-3">
-              <Avatar size="sm">
-                <AvatarImage src={user?.imageUrl} alt={user?.firstName ?? "User"} />
-                <AvatarFallback>{user?.firstName?.[0] ?? "U"}</AvatarFallback>
-              </Avatar>
-              <span className="hidden text-sm font-medium sm:inline">
-                {user?.firstName}
-              </span>
-              <div className="text-xs text-muted-foreground">
-                <SignOutButton />
-              </div>
-            </div>
-          </Show>
-        </div>
-      </div>
-    </header>
   );
 }
 
@@ -14418,6 +16091,300 @@ export async function toggleProductFeaturedForm(formData: FormData): Promise<voi
 }
 
 ================
+File: src/lib/auth.ts
+================
+import { auth, currentUser } from "@clerk/nextjs/server";
+
+import { AppError } from "@/lib/AppError";
+
+/*
+ * These replace your old Express `requireAuth`/`requireAdmin` middleware.
+ * Same checks, same messages, same status codes carried into AppError —
+ * but called as the first line inside a Server Action/Route Handler instead
+ * of sitting in a router chain.
+ */
+
+export async function requireAuth(): Promise<string> {
+  const { userId } = await auth();
+
+  if (!userId) {
+    throw new AppError("Unauthenticated access", 401);
+  }
+
+  return userId;
+}
+
+export async function requireAdmin(): Promise<string> {
+  const { userId } = await auth();
+
+  // 1. Ensure user is authenticated
+  if (!userId) {
+    throw new AppError("Unauthenticated access", 401);
+  }
+
+  // Read the authoritative user metadata instead of relying on a custom token claim.
+  const user = await currentUser();
+  if (user?.publicMetadata?.role !== "admin") {
+    throw new AppError("Admin access required", 403);
+  }
+
+  return userId;
+}
+
+================
+File: src/lib/env.ts
+================
+const requiredEnvVars = [
+  "MONGODB_URI",
+  "CLOUDINARY_CLOUD_NAME",
+  "CLOUDINARY_API_KEY",
+  "CLOUDINARY_API_SECRET",
+  "STRIPE_SECRET_KEY",
+  "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  // "CLERK_WEBHOOK_SECRET",
+  // "STRIPE_SECRET_KEY",
+  // "STRIPE_WEBHOOK_SECRET",
+] as const;
+
+for (const key of requiredEnvVars) {
+  if (!process.env[key]) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+}
+
+export const env = {
+  NODE_ENV: process.env.NODE_ENV ?? "development",
+  MONGODB_URI: process.env.MONGODB_URI as string,
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME as string,
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY as string,
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET as string,
+  CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET as string,
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY as string,
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string,
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET as string,
+};
+
+================
+File: src/proxy.ts
+================
+import { clerkMiddleware } from "@clerk/nextjs/server";
+
+export default clerkMiddleware(async (auth, request) => {
+  if (request.nextUrl.pathname.startsWith("/admin")) {
+    await auth.protect();
+  }
+});
+
+export const config = {
+  matcher: [
+    // Skip Next.js internals and all static files, unless found in search params
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Always run for API routes
+    "/(api|trpc)(.*)",
+    // Always run for Clerk-specific frontend API routes
+    "/__clerk/(.*)",
+  ],
+};
+
+================
+File: src/app/components/Header.tsx
+================
+// src/app/components/Header.tsx
+import { currentUser } from "@clerk/nextjs/server";
+import { Show, SignOutButton } from "@clerk/nextjs";
+import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { CartTrigger } from "@/features/cart/components/CartTrigger";
+
+// Add more entries here as new storefront pages come online
+// (Deals, About, etc.) — this list is the single place to wire them up.
+const navLinks = [
+  { label: "Home", href: "/" },
+  { label: "Products", href: "/products" },
+  { label: "Brands", href: "/brands" },
+  { label: "Checkout", href: "/checkout" }
+];
+
+export default async function Header() {
+  let user = null;
+
+  try {
+    user = await currentUser();
+  } catch (error) {
+    console.error("Clerk user lookup failed while rendering the header", error);
+  }
+
+  const isAdmin = user?.publicMetadata?.role === "admin";
+
+  return (
+    <header className="sticky top-0 z-30 -mx-5 -mt-5 mb-6 rounded-t-lg border-b bg-background/80 backdrop-blur-md">
+      <div className="flex h-16 items-center justify-between gap-4 px-5">
+        {/* Logo */}
+        <Link href="/" className="flex shrink-0 items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground font-heading text-sm font-bold text-background">
+            E
+          </span>
+          <span className="text-lg font-bold tracking-tight">Ecomora</span>
+        </Link>
+
+        {/* Nav */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {link.label}
+            </Link>
+          ))}
+          {isAdmin && (
+            <Show when="signed-in">
+              <Link
+                href="/admin"
+                className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                Admin
+              </Link>
+            </Show>
+          )}
+        </nav>
+
+        {/* Right side actions */}
+        <div className="flex shrink-0 items-center gap-2">
+          <Show when="signed-in">
+            <CartTrigger />
+          </Show>
+
+          <Show when="signed-out">
+            <Button
+              variant="ghost"
+              nativeButton={false}
+              render={<Link href="/sign-in" />}
+            >
+              Sign In
+            </Button>
+            <Button
+              className="rounded-full"
+              nativeButton={false}
+              render={<Link href="/sign-up" />}
+            >
+              Sign Up
+            </Button>
+          </Show>
+
+          <Show when="signed-in">
+            <div className="flex items-center gap-2 rounded-full border py-1 pl-1 pr-3">
+              <Avatar size="sm">
+                <AvatarImage src={user?.imageUrl} alt={user?.firstName ?? "User"} />
+                <AvatarFallback>{user?.firstName?.[0] ?? "U"}</AvatarFallback>
+              </Avatar>
+              <span className="hidden text-sm font-medium sm:inline">
+                {user?.firstName}
+              </span>
+              <div className="text-xs text-muted-foreground">
+                <SignOutButton />
+              </div>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+================
+File: src/features/category/components/CategoryTable.tsx
+================
+import Link from "next/link";
+import Image from "next/image";
+import { ImageIcon } from "lucide-react";
+import type { CategoryDTO } from "../types";
+import { CategoryRowActions } from "./CategoryRowActions";
+
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+
+export function CategoryTable({ categories }: { categories: CategoryDTO[] }) {
+  const nameById = new Map(categories.map((c) => [c.id, c.name]));
+
+  if (categories.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-12 text-center">
+        <p className="text-sm text-muted-foreground">No categories found.</p>
+        <Button
+          variant="link"
+          nativeButton={false}
+          render={<Link href="/admin/categories/new" />}
+          className="mt-2"
+        >
+          Create your first category
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-14"></TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Slug</TableHead>
+            <TableHead>Parent</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Sort Order</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {categories.map((c) => (
+            <TableRow key={c.id}>
+              <TableCell>
+                <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
+                  {c.image ? (
+                    <Image src={c.image} alt="" fill className="object-cover" />
+                  ) : (
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+              </TableCell>
+              <TableCell className="font-medium">{c.name}</TableCell>
+              <TableCell className="text-muted-foreground font-mono text-xs">
+                {c.slug}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {c.parentCategoryId ? (nameById.get(c.parentCategoryId) ?? "—") : "—"}
+              </TableCell>
+              <TableCell>
+                <Badge variant={c.status === "active" ? "default" : "secondary"}>
+                  {c.status}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">{c.sortOrder}</TableCell>
+              <TableCell className="text-right">
+                <CategoryRowActions id={c.id} name={c.name} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+================
 File: src/features/product/components/ProductCard.tsx
 ================
 // src/features/product/components/ProductCard.tsx
@@ -14573,158 +16540,6 @@ export function ProductCard({ product, className }: ProductCardProps) {
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-================
-File: src/lib/auth.ts
-================
-import { auth, currentUser } from "@clerk/nextjs/server";
-
-import { AppError } from "@/lib/AppError";
-
-/*
- * These replace your old Express `requireAuth`/`requireAdmin` middleware.
- * Same checks, same messages, same status codes carried into AppError —
- * but called as the first line inside a Server Action/Route Handler instead
- * of sitting in a router chain.
- */
-
-export async function requireAuth(): Promise<string> {
-  const { userId } = await auth();
-
-  if (!userId) {
-    throw new AppError("Unauthenticated access", 401);
-  }
-
-  return userId;
-}
-
-export async function requireAdmin(): Promise<string> {
-  const { userId } = await auth();
-
-  // 1. Ensure user is authenticated
-  if (!userId) {
-    throw new AppError("Unauthenticated access", 401);
-  }
-
-  // Read the authoritative user metadata instead of relying on a custom token claim.
-  const user = await currentUser();
-  if (user?.publicMetadata?.role !== "admin") {
-    throw new AppError("Admin access required", 403);
-  }
-
-  return userId;
-}
-
-================
-File: src/proxy.ts
-================
-import { clerkMiddleware } from "@clerk/nextjs/server";
-
-export default clerkMiddleware(async (auth, request) => {
-  if (request.nextUrl.pathname.startsWith("/admin")) {
-    await auth.protect();
-  }
-});
-
-export const config = {
-  matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
-    "/(api|trpc)(.*)",
-    // Always run for Clerk-specific frontend API routes
-    "/__clerk/(.*)",
-  ],
-};
-
-================
-File: src/features/category/components/CategoryTable.tsx
-================
-import Link from "next/link";
-import Image from "next/image";
-import { ImageIcon } from "lucide-react";
-import type { CategoryDTO } from "../types";
-import { CategoryRowActions } from "./CategoryRowActions";
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-
-export function CategoryTable({ categories }: { categories: CategoryDTO[] }) {
-  const nameById = new Map(categories.map((c) => [c.id, c.name]));
-
-  if (categories.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-12 text-center">
-        <p className="text-sm text-muted-foreground">No categories found.</p>
-        <Button
-          variant="link"
-          nativeButton={false}
-          render={<Link href="/admin/categories/new" />}
-          className="mt-2"
-        >
-          Create your first category
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-md border border-border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-14"></TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Slug</TableHead>
-            <TableHead>Parent</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Sort Order</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {categories.map((c) => (
-            <TableRow key={c.id}>
-              <TableCell>
-                <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30">
-                  {c.image ? (
-                    <Image src={c.image} alt="" fill className="object-cover" />
-                  ) : (
-                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="font-medium">{c.name}</TableCell>
-              <TableCell className="text-muted-foreground font-mono text-xs">
-                {c.slug}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {c.parentCategoryId ? (nameById.get(c.parentCategoryId) ?? "—") : "—"}
-              </TableCell>
-              <TableCell>
-                <Badge variant={c.status === "active" ? "default" : "secondary"}>
-                  {c.status}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">{c.sortOrder}</TableCell>
-              <TableCell className="text-right">
-                <CategoryRowActions id={c.id} name={c.name} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
   );
 }
 
@@ -15187,6 +17002,8 @@ File: package.json
     "@clerk/nextjs": "^7.8.0",
     "@hookform/resolvers": "^5.9.1",
     "@sendgrid/mail": "^8.1.6",
+    "@stripe/react-stripe-js": "^6.8.2",
+    "@stripe/stripe-js": "^9.14.0",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.10.1",
     "clsx": "^2.1.1",
@@ -15208,6 +17025,7 @@ File: package.json
     "server-only": "^0.0.1",
     "shadcn": "^4.19.0",
     "sonner": "^2.0.8",
+    "stripe": "^22.6.0",
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",
     "zod": "^4.4.3"

@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "./typeset.css";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 
 .typeset-article {

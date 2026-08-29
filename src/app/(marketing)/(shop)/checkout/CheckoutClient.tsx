@@ -1,7 +1,7 @@
 // src/app/(marketing)/(shop)/checkout/CheckoutClient.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -11,6 +11,8 @@ import {
   Loader2,
   Check,
   ChevronRight,
+  Shield,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -54,6 +56,23 @@ type Props = {
   addresses: IAddressDTO[];
 };
 
+// Custom Card Element Styles
+const CARD_ELEMENT_OPTIONS = {
+  style: {
+    base: {
+      fontSize: "16px",
+      color: "#424770",
+      "::placeholder": {
+        color: "#aab7c4",
+      },
+      padding: "10px",
+    },
+    invalid: {
+      color: "#9e2146",
+    },
+  },
+};
+
 function CheckoutForm({ cart, addresses }: Props) {
   const router = useRouter();
   const stripe = useStripe();
@@ -64,6 +83,8 @@ function CheckoutForm({ cart, addresses }: Props) {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
+  const [cardComplete, setCardComplete] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // Address form state
   const [newAddress, setNewAddress] = useState<AddressInput>({
@@ -87,6 +108,11 @@ function CheckoutForm({ cart, addresses }: Props) {
   const shipping = 0;
   const total = subtotal + shipping;
 
+  // Reset card error when user types
+  useEffect(() => {
+    if (paymentError) setPaymentError(null);
+  }, [paymentError]);
+
   const handlePlaceOrder = async () => {
     if (!stripe || !elements) {
       toast.error("Payment system not ready");
@@ -98,7 +124,13 @@ function CheckoutForm({ cart, addresses }: Props) {
       return;
     }
 
+    if (!cardComplete) {
+      toast.error("Please enter your payment details");
+      return;
+    }
+
     setIsLoading(true);
+    setPaymentError(null);
 
     try {
       // 1. Create Payment Intent
@@ -124,12 +156,23 @@ function CheckoutForm({ cart, addresses }: Props) {
             card: cardElement,
             billing_details: {
               name: selectedAddress?.fullName || "Customer",
+              email: "customer@example.com", // You can get this from user session
+              phone: selectedAddress?.phone || "",
+              address: {
+                line1: selectedAddress?.addressLine1 || "",
+                line2: selectedAddress?.addressLine2 || "",
+                city: selectedAddress?.city || "",
+                state: selectedAddress?.state || "",
+                postal_code: selectedAddress?.postalCode || "",
+                country: selectedAddress?.country || "",
+              },
             },
           },
         }
       );
 
       if (error) {
+        setPaymentError(error.message || "Payment failed");
         toast.error(error.message || "Payment failed");
         setIsLoading(false);
         return;
@@ -149,11 +192,13 @@ function CheckoutForm({ cart, addresses }: Props) {
           return;
         }
 
-        toast.success("Order placed successfully!");
+        toast.success("Order placed successfully! 🎉");
         router.push(`/order/confirmation/${orderResult.data!.orderId}`);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Something went wrong");
+      const message = error instanceof Error ? error.message : "Something went wrong";
+      setPaymentError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -372,7 +417,7 @@ function CheckoutForm({ cart, addresses }: Props) {
           </CardContent>
         </Card>
 
-        {/* Payment Section */}
+        {/* Payment Section - IMPROVED */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -381,23 +426,44 @@ function CheckoutForm({ cart, addresses }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="p-4 border rounded-lg bg-muted/10">
-              <CardElement
-                options={{
-                  style: {
-                    base: {
-                      fontSize: "16px",
-                      color: "#424770",
-                      "::placeholder": { color: "#aab7c4" },
-                    },
-                    invalid: { color: "#9e2146" },
-                  },
-                }}
-              />
+            <div className="space-y-4">
+              {/* Test Card Info - Helpful for development */}
+              <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
+                <p className="text-xs font-medium text-muted-foreground mb-1">
+                  💳 Test Card (Development)
+                </p>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="bg-muted px-2 py-0.5 rounded">4242 4242 4242 4242</span>
+                  <span className="bg-muted px-2 py-0.5 rounded">12/34</span>
+                  <span className="bg-muted px-2 py-0.5 rounded">123</span>
+                </div>
+              </div>
+
+              {/* Card Element */}
+              <div className="p-4 border rounded-lg bg-background transition-all focus-within:ring-2 focus-within:ring-primary/50">
+                <CardElement
+                  options={CARD_ELEMENT_OPTIONS}
+                  onChange={(event) => {
+                    setCardComplete(event.complete);
+                    if (event.error) {
+                      setPaymentError(event.error.message);
+                    } else {
+                      setPaymentError(null);
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Payment Error */}
+              {paymentError && (
+                <p className="text-sm text-destructive">{paymentError}</p>
+              )}
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Lock className="h-3 w-3" />
+                <span>Your payment information is secure and encrypted.</span>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Your payment information is secure and encrypted.
-            </p>
           </CardContent>
         </Card>
       </div>
@@ -500,14 +566,19 @@ function CheckoutForm({ cart, addresses }: Props) {
               className="w-full"
               size="lg"
               onClick={handlePlaceOrder}
-              disabled={isLoading || !selectedAddressId || !stripe}
+              disabled={isLoading || !selectedAddressId || !stripe || !cardComplete}
             >
               {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Processing Payment...
+                </>
               ) : (
-                <ChevronRight className="h-4 w-4 mr-2" />
+                <>
+                  <Lock className="h-4 w-4 mr-2" />
+                  Pay {formatPrice(total)}
+                </>
               )}
-              {isLoading ? "Processing..." : "Place Order"}
             </Button>
 
             <p className="text-xs text-center text-muted-foreground">
