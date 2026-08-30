@@ -15,6 +15,17 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
 
+type OrderItemLike = {
+  productId: { toString(): string } | string;
+  variantId: { toString(): string } | string;
+  productName: string;
+  sku: string;
+  attributes?: Record<string, string>;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+};
+
 export default async function AdminOrderDetailPage({ params }: Props) {
   await requireAdmin();
   const { id } = await params;
@@ -23,9 +34,11 @@ export default async function AdminOrderDetailPage({ params }: Props) {
   const order = await Order.findById(id).lean();
   if (!order) notFound();
 
+  const orderItems = (order.items ?? []) as OrderItemLike[];
+
   const dto: IOrderDTO = {
     id: order._id.toString(),
-    items: order.items.map((i) => ({
+    items: orderItems.map((i) => ({
       productId: i.productId.toString(),
       variantId: i.variantId.toString(),
       productName: i.productName,
