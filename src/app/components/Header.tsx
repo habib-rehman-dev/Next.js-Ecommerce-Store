@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { CartTrigger } from "@/features/cart/components/CartTrigger";
 import { HeaderSearchBox } from "@/features/product/components/HeaderSearchBox";
 import { getCategories } from "@/features/category/queries/get-categories";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { MobileNav } from "@/components/MobileNav";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,16 +39,23 @@ export default async function Header() {
 
   return (
     <header className="sticky top-0 z-30 -mx-5 -mt-5 mb-6 rounded-t-lg border-b bg-background/80 backdrop-blur-md">
-      <div className="flex h-16 items-center justify-between gap-4 px-5">
+      <div className="flex h-16 items-center justify-between gap-2 px-3 md:gap-4 md:px-5">
+        {/* Mobile Menu Trigger */}
+        <MobileNav 
+          navLinks={navLinks} 
+          categories={categories}
+          isAdmin={isAdmin}
+        />
+
         {/* Logo */}
         <Link href="/" className="flex shrink-0 items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground font-heading text-sm font-bold text-background">
             E
           </span>
-          <span className="text-lg font-bold tracking-tight">Ecomora</span>
+          <span className="hidden text-lg font-bold tracking-tight sm:inline">Ecomora</span>
         </Link>
 
-        {/* Nav */}
+        {/* Nav - Desktop Only */}
         <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => (
             <Link
@@ -91,12 +100,13 @@ export default async function Header() {
         </nav>
 
         {/* Search (desktop) */}
-        <div className="hidden md:block">
+        <div className="hidden md:block md:flex-1 md:max-w-xs">
           <HeaderSearchBox />
         </div>
 
         {/* Right side actions */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 md:gap-2">
+          <ThemeToggle />
           <Show when="signed-in">
             <Link href="/orders">
               <Button variant="ghost" size="icon" aria-label="Your orders">
@@ -109,13 +119,16 @@ export default async function Header() {
           <Show when="signed-out">
             <Button
               variant="ghost"
+              size="sm"
               nativeButton={false}
               render={<Link href="/sign-in" />}
+              className="hidden sm:inline-flex"
             >
               Sign In
             </Button>
             <Button
-              className="rounded-full"
+              className="rounded-full hidden sm:inline-flex"
+              size="sm"
               nativeButton={false}
               render={<Link href="/sign-up" />}
             >
@@ -124,7 +137,7 @@ export default async function Header() {
           </Show>
 
           <Show when="signed-in">
-            <div className="flex items-center gap-2 rounded-full border py-1 pl-1 pr-3">
+            <div className="items-center gap-2 rounded-full border py-1 pl-1 pr-3 hidden sm:flex">
               <Avatar size="sm">
                 <AvatarImage
                   src={user?.imageUrl}
@@ -132,7 +145,7 @@ export default async function Header() {
                 />
                 <AvatarFallback>{user?.firstName?.[0] ?? "U"}</AvatarFallback>
               </Avatar>
-              <span className="hidden text-sm font-medium sm:inline">
+              <span className="hidden text-sm font-medium md:inline">
                 {user?.firstName}
               </span>
               <div className="text-xs text-muted-foreground">
@@ -144,7 +157,7 @@ export default async function Header() {
       </div>
 
       {/* Mobile search — full width below the main bar */}
-      <div className="border-t px-5 py-2 md:hidden">
+      <div className="border-t px-3 py-2 md:hidden">
         <HeaderSearchBox />
       </div>
     </header>

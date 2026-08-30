@@ -9,6 +9,21 @@ import { getFeaturedProducts } from "@/features/product/queries/get-featured-pro
 import { FeaturedProductsSection } from "@/features/product/components/FeaturedProductsSection";
 import { NewsletterSection } from "@/features/newsletter/components/NewsletterSection";
 import { TrustSignals } from "@/features/trust/components/TrustSignals";
+import { Suspense } from "react";
+import type { Metadata } from "next";
+import { MarketingPageSkeleton } from "../components/skeletons/MarketingPageSkeleton";
+
+// ... inside MarketingPage return:
+
+export const metadata: Metadata = {
+  title: "Ecomora | Shop the Best Products Online",
+  description: "Discover top-quality products, amazing deals, and industry-leading brands at your favorite online store.",
+  openGraph: {
+    title: "Ecomora | Shop the Best Products Online",
+    description: "Discover top-quality products, amazing deals, and industry-leading brands.",
+    images: [{ url: "/images/og-homepage.jpg" }],
+  }, 
+};
 
 export default async function MarketingPage() {
   const [banners, categories, brands, featuredProducts, bestSellingProducts, newArrivals] =
@@ -24,6 +39,8 @@ export default async function MarketingPage() {
   const primaryBanner = banners[0];
 
   return (
+      <Suspense fallback={<MarketingPageSkeleton />}>
+
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-12">
       {/* Hero Banner */}
       {primaryBanner && <HeroBannerSection banner={primaryBanner} />}
@@ -51,5 +68,6 @@ export default async function MarketingPage() {
       {/* Newsletter Section - NEW */}
       <NewsletterSection source="homepage" />
     </main>
+    </Suspense>
   );
 }

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const geistSans = Geist({
@@ -42,10 +43,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <html
         className={`${raleway.variable} ${geist.variable} ${geistMono.variable}`}
+        suppressHydrationWarning
       >
         <body>
-          {children}
-          <Toaster/>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            {children}
+            <Toaster/>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

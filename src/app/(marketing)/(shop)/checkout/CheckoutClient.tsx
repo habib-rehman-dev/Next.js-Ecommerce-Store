@@ -1,7 +1,7 @@
 // src/app/(marketing)/(shop)/checkout/CheckoutClient.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -10,8 +10,8 @@ import {
   Plus,
   Loader2,
   Check,
- 
   Lock,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -33,8 +33,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { createPaymentIntent } from "@/features/payment/actions/create-payment-intent";
-import { confirmOrder } from "@/features/payment/actions/confirm-order";
 import { createAddress } from "@/features/address/actions/create-address";
+import { validateCoupon, type CouponPreview } from "@/features/coupon/actions/validate-coupon";
 import { AddressInput } from "@/features/address/validation";
 import type { ICartDTO } from "@/features/cart/types";
 import type { IAddressDTO } from "@/features/address/types";
@@ -99,18 +99,43 @@ function CheckoutForm({ cart, addresses }: Props) {
   });
 
   // Coupon state
-  const [couponCode, setCouponCode] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponPreview | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, startCouponValidation] = useTransition();
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
   const subtotal = cart.subtotal;
   const shipping = 0;
-  const total = subtotal + shipping;
+  const discount = appliedCoupon?.discountAmount ?? 0;
+  const total = Math.max(subtotal + shipping - discount, 0);
 
   // Reset card error when user types
   useEffect(() => {
     if (paymentError) setPaymentError(null);
   }, [paymentError]);
+
+  function handleApplyCoupon() {
+    if (!couponInput.trim()) return;
+    setCouponError(null);
+
+    startCouponValidation(async () => {
+      const result = await validateCoupon(couponInput, subtotal);
+      if (!result.success) {
+        setCouponError(result.message);
+        setAppliedCoupon(null);
+        return;
+      }
+      setAppliedCoupon(result.data!);
+      toast.success(`Coupon ${result.data!.code} applied`);
+    });
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponInput("");
+    setCouponError(null);
+  }
 
   const handlePlaceOrder = async () => {
     if (!stripe || !elements) {
@@ -132,13 +157,22 @@ function CheckoutForm({ cart, addresses }: Props) {
     setPaymentError(null);
 
     try {
-      // 1. Create Payment Intent
-      const paymentIntentResult = await createPaymentIntent(shipping);
+      // 1. Create the pending Order + PaymentIntent together. The discount
+      // is recomputed and re-validated server-side here — appliedCoupon is
+      // only used for the on-screen preview, never trusted for the charge.
+      const paymentIntentResult = await createPaymentIntent({
+        shippingAddressId: selectedAddressId,
+        couponCode: appliedCoupon?.code,
+        shippingFee: shipping,
+      });
+
       if (!paymentIntentResult.success) {
         toast.error(paymentIntentResult.message);
         setIsLoading(false);
         return;
       }
+
+      const { clientSecret, orderId } = paymentIntentResult.data!;
 
       // 2. Confirm payment with Stripe
       const cardElement = elements.getElement(CardElement);
@@ -148,27 +182,23 @@ function CheckoutForm({ cart, addresses }: Props) {
         return;
       }
 
-      const { error, paymentIntent } = await stripe.confirmCardPayment(
-        paymentIntentResult.data!.clientSecret,
-        {
-          payment_method: {
-            card: cardElement,
-            billing_details: {
-              name: selectedAddress?.fullName || "Customer",
-              email: "customer@example.com", // You can get this from user session
-              phone: selectedAddress?.phone || "",
-              address: {
-                line1: selectedAddress?.addressLine1 || "",
-                line2: selectedAddress?.addressLine2 || "",
-                city: selectedAddress?.city || "",
-                state: selectedAddress?.state || "",
-                postal_code: selectedAddress?.postalCode || "",
-                country: selectedAddress?.country || "",
-              },
+      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: selectedAddress?.fullName || "Customer",
+            phone: selectedAddress?.phone || "",
+            address: {
+              line1: selectedAddress?.addressLine1 || "",
+              line2: selectedAddress?.addressLine2 || "",
+              city: selectedAddress?.city || "",
+              state: selectedAddress?.state || "",
+              postal_code: selectedAddress?.postalCode || "",
+              country: selectedAddress?.country || "",
             },
           },
-        }
-      );
+        },
+      });
 
       if (error) {
         setPaymentError(error.message || "Payment failed");
@@ -178,21 +208,11 @@ function CheckoutForm({ cart, addresses }: Props) {
       }
 
       if (paymentIntent?.status === "succeeded") {
-        // 3. Confirm order in database
-        const orderResult = await confirmOrder({
-          paymentIntentId: paymentIntent.id,
-          shippingAddressId: selectedAddressId,
-          couponCode: appliedCoupon || undefined,
-        });
-
-        if (!orderResult.success) {
-          toast.error(orderResult.message);
-          setIsLoading(false);
-          return;
-        }
-
+        // The Order already exists (created in step 1) and the Stripe
+        // webhook finalizes it (marks it paid, decrements stock, redeems
+        // the coupon, clears the cart) — we just redirect here.
         toast.success("Order placed successfully! 🎉");
-        router.push(`/order/confirmation/${orderResult.data!.orderId}`);
+        router.push(`/order/confirmation/${orderId}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong";
@@ -416,7 +436,7 @@ function CheckoutForm({ cart, addresses }: Props) {
           </CardContent>
         </Card>
 
-        {/* Payment Section - IMPROVED */}
+        {/* Payment Section */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -504,34 +524,36 @@ function CheckoutForm({ cart, addresses }: Props) {
             <Separator />
 
             {/* Coupon Input */}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Coupon code"
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                disabled={!!appliedCoupon}
-                className="flex-1"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (appliedCoupon) {
-                    setAppliedCoupon(null);
-                    setCouponCode("");
-                  } else if (couponCode) {
-                    setAppliedCoupon(couponCode);
-                  }
-                }}
-              >
-                {appliedCoupon ? "Remove" : "Apply"}
-              </Button>
-            </div>
-
-            {appliedCoupon && (
-              <Badge variant="secondary" className="gap-1">
-                <Check className="h-3 w-3" /> {appliedCoupon} applied
-              </Badge>
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between rounded-lg border bg-green-500/5 px-3 py-2">
+                <Badge variant="secondary" className="gap-1">
+                  <Check className="h-3 w-3" /> {appliedCoupon.code} (-{appliedCoupon.discountValue}%)
+                </Badge>
+                <Button variant="ghost" size="icon-sm" onClick={handleRemoveCoupon}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Coupon code"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    disabled={isValidatingCoupon}
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleApplyCoupon}
+                    disabled={isValidatingCoupon || !couponInput.trim()}
+                  >
+                    {isValidatingCoupon ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+                {couponError && <p className="text-xs text-destructive">{couponError}</p>}
+              </div>
             )}
 
             <Separator />
@@ -546,10 +568,10 @@ function CheckoutForm({ cart, addresses }: Props) {
                 <span className="text-muted-foreground">Shipping</span>
                 <span className="text-green-600">Free</span>
               </div>
-              {appliedCoupon && (
+              {discount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Discount</span>
-                  <span>-{formatPrice(subtotal * 0.1)}</span>
+                  <span>-{formatPrice(discount)}</span>
                 </div>
               )}
             </div>

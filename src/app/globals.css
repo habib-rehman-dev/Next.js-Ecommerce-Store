@@ -141,3 +141,13 @@
     @apply font-sans;
   }
 }
+
+@layer utilities {
+  .glass-morphism {
+    @apply bg-background/70 backdrop-blur-md backdrop-saturate-150 border border-foreground/10;
+  }
+
+  .glass-morphism-subtle {
+    @apply bg-background/50 backdrop-blur-sm border border-foreground/5;
+  }
+}
