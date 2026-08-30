@@ -145,7 +145,7 @@ export function useOptimisticCart() {
 
     // Server action
     startTransition(async () => {
-      const result = await updateCartItem(itemId, newQuantity)
+      const result = await updateCartItem({itemId, newQuantity})
 
       if (!result.success) {
         // Rollback on error
