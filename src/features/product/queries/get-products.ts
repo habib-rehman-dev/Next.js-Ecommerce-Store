@@ -11,6 +11,7 @@ export interface GetProductsParams {
   brandId?: string;
   status?: string;
   isFeatured?: boolean;
+  sort?: Record<string, 1 | -1>;
 }
 
 export async function getProducts({
@@ -21,6 +22,7 @@ export async function getProducts({
   brandId,
   status,
   isFeatured,
+  sort = { createdAt: -1 },
 }: GetProductsParams = {}) {
   try {
     await dbConnect();
@@ -37,7 +39,7 @@ export async function getProducts({
 
     // Direct match filters
     if (categoryId) query.categoryId = categoryId;
-    if (brandId) query.brandId = brandId; // ✅ Already supported
+    if (brandId) query.brandId = brandId;
     if (status) query.status = status;
     if (isFeatured !== undefined) query.isFeatured = isFeatured;
 
@@ -47,7 +49,7 @@ export async function getProducts({
       Product.find(query)
         .populate("categoryId", "name slug")
         .populate("brandId", "name slug")
-        .sort({ createdAt: -1 })
+        .sort(sort)
         .skip(skip)
         .limit(limit)
         .lean(),

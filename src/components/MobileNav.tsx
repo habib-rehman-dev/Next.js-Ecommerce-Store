@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { Menu } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import * as React from "react";
+import Link from "next/link";
+import { Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -11,36 +11,38 @@ import {
   SheetTitle,
   SheetClose,
   SheetTrigger,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { ChevronDown } from "lucide-react"
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 
 interface MobileNavProps {
-  navLinks: Array<{ label: string; href: string }>
-  categories?: Array<{ id: string; name: string }>
-  isAdmin?: boolean
+  navLinks: Array<{ label: string; href: string }>;
+  categories?: Array<{ id: string; name: string }>;
+  isAdmin?: boolean;
 }
 
-export function MobileNav({ navLinks, categories = [], isAdmin = false }: MobileNavProps) {
-  const [open, setOpen] = React.useState(false)
-  const [categoriesOpen, setCategoriesOpen] = React.useState(false)
+export function MobileNav({
+  navLinks,
+  categories = [],
+  isAdmin = false,
+}: MobileNavProps) {
+  const [open, setOpen] = React.useState(false);
+  const [categoriesOpen, setCategoriesOpen] = React.useState(false);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger >
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
-        >
-          <Menu className="h-5 w-5" />
-          <span className="sr-only">Toggle menu</span>
-        </Button>
-      </SheetTrigger>
+      <SheetTrigger
+        render={
+          <Button variant="ghost" size="icon" className="md:hidden">
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Toggle menu</span>
+          </Button>
+        }
+      ></SheetTrigger>
 
       <SheetContent side="left" className="w-[80vw] sm:w-80 glass-morphism">
         <SheetHeader className="border-b pb-4">
@@ -50,7 +52,7 @@ export function MobileNav({ navLinks, categories = [], isAdmin = false }: Mobile
         <nav className="mt-6 space-y-2">
           {/* Main Navigation Links */}
           {navLinks.map((link) => (
-            <SheetClose key={link.href} >
+            <SheetClose key={link.href}>
               <Link
                 href={link.href}
                 className="block rounded-lg px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
@@ -73,7 +75,7 @@ export function MobileNav({ navLinks, categories = [], isAdmin = false }: Mobile
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-1 pt-2 pl-4">
                 {categories.map((cat) => (
-                  <SheetClose key={cat.id} >
+                  <SheetClose key={cat.id}>
                     <Link
                       href={`/products?categoryId=${cat.id}`}
                       className="block rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -88,7 +90,7 @@ export function MobileNav({ navLinks, categories = [], isAdmin = false }: Mobile
 
           {/* Admin Link */}
           {isAdmin && (
-            <SheetClose >
+            <SheetClose>
               <Link
                 href="/admin"
                 className="block rounded-lg px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
@@ -101,7 +103,7 @@ export function MobileNav({ navLinks, categories = [], isAdmin = false }: Mobile
 
         {/* Footer Links */}
         <div className="absolute bottom-0 left-0 right-0 border-t bg-background/95 p-4 space-y-2">
-          <SheetClose >
+          <SheetClose>
             <Link
               href="/orders"
               className="block rounded-lg px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
@@ -109,7 +111,7 @@ export function MobileNav({ navLinks, categories = [], isAdmin = false }: Mobile
               My Orders
             </Link>
           </SheetClose>
-          <SheetClose >
+          <SheetClose>
             <Link
               href="/wishlist"
               className="block rounded-lg px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
@@ -120,5 +122,5 @@ export function MobileNav({ navLinks, categories = [], isAdmin = false }: Mobile
         </div>
       </SheetContent>
     </Sheet>
-  )
+  );
 }

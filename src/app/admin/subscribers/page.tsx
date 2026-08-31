@@ -1,4 +1,6 @@
-import { getSubscribers, deleteSubscriberForm } from "@/features/newsletter/actions/subscribe";
+// import { getSubscribers, deleteSubscriberForm } from "@/features/newsletter/actions/subscribe";
+import { deleteSubscriberForm } from "@/features/newsletter/actions/subscribe";
+import { getSubscribers } from "@/features/newsletter/queries/get-subscribers";
 import { Button } from "@/components/ui/button";
 import {
   Table,

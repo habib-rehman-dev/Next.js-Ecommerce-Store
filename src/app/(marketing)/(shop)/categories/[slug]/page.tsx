@@ -10,6 +10,7 @@ import { ProductCard } from "@/features/product/components/ProductCard";
 import { ProductsPagination } from "@/app/admin/products/ProductsPagination";
 import { getRatingSummaries } from "@/features/review/queries/get-rating-summaries";
 import { Badge } from "@/components/ui/badge";
+import type { IProduct } from "@/features/product/types";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -22,13 +23,12 @@ type Props = {
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { page: pageParam = "1", sort = "newest" } = await searchParams;
-  
+
   const page = Number(pageParam) || 1;
   const limit = 12;
 
-  // Fetch category and products in parallel
   const category = await getCategoryById(slug);
-  
+
   if (!category) {
     notFound();
   }
@@ -46,15 +46,12 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     limit,
     categoryId: category.id,
     status: "active",
+    sort: sortOption,
   });
 
   // Get ratings for all products in one efficient query
-  const productIds = products.map((p: any) => p._id);
+  const productIds = products.map((p: IProduct) => p._id);
   const ratingsMap = await getRatingSummaries(productIds);
-
-  // Build the page title and description for metadata
-  const pageTitle = category.name;
-  const pageDescription = category.description || `Browse ${category.name} products in our store`;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -72,7 +69,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       </nav>
 
       {/* Category Hero Section */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-background to-primary/5 border p-8 sm:p-12">
+      <div className="relative overflow-hidden rounded-2xl bg-linear-to-br from-primary/10 via-background to-primary/5 border p-8 sm:p-12">
         <div className="relative z-10 max-w-2xl">
           <Badge variant="outline" className="mb-3 text-xs font-semibold uppercase tracking-wider border-primary/20 text-primary">
             Category
@@ -152,7 +149,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {products.map((product: any) => (
+          {products.map((product: IProduct) => (
             <ProductCard
               key={product._id}
               product={product}

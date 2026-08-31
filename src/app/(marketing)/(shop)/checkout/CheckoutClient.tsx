@@ -1,7 +1,7 @@
 // src/app/(marketing)/(shop)/checkout/CheckoutClient.tsx
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -110,10 +110,10 @@ function CheckoutForm({ cart, addresses }: Props) {
   const discount = appliedCoupon?.discountAmount ?? 0;
   const total = Math.max(subtotal + shipping - discount, 0);
 
-  // Reset card error when user types
-  useEffect(() => {
-    if (paymentError) setPaymentError(null);
-  }, [paymentError]);
+  // // Reset card error when user types
+  // useEffect(() => {
+  //   if (paymentError) setPaymentError(null);
+  // }, [paymentError]);
 
   function handleApplyCoupon() {
     if (!couponInput.trim()) return;

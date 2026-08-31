@@ -1,3 +1,4 @@
+import "server-only";
 import {dbConnect} from "@/lib/db/dbConnect";
 import { Coupon } from "@/models/Coupon";
 import { CouponSerialized } from "../types";

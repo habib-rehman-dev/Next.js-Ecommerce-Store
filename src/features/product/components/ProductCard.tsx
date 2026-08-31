@@ -133,15 +133,15 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
   return (
     <Card
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-[36px] border border-border/40 bg-[#F2F3F5] p-3.5 shadow-sm transition-all duration-300 hover:shadow-md",
+        "group relative flex flex-col overflow-hidden rounded-[36px] border border-border/40 bg-card p-3.5 shadow-sm transition-all duration-300 hover:shadow-md",
         className,
       )}
     >
       {/* Top Image Container */}
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[28px] bg-gradient-to-b from-[#2A3036] via-[#20252A] to-[#A3B3C2]">
+      <div className="relative aspect-4/3 w-full overflow-hidden rounded-[28px] bg-muted">
         {/* Trending Badge */}
         <div className="absolute left-3.5 top-3.5 z-10">
-          <Badge className="rounded-full bg-[#32C850] px-3.5 py-1 text-xs font-semibold text-white hover:bg-[#32C850] border-none shadow-none">
+          <Badge className="rounded-full bg-emerald-600 px-3.5 py-1 text-xs font-semibold text-white hover:bg-emerald-600 border-none shadow-none">
             Trending
           </Badge>
         </div>
@@ -152,17 +152,17 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
           disabled={isCheckingWishlist || isTogglingWishlist}
           onClick={handleWishlistToggle}
           className={cn(
-            "absolute right-3.5 top-3.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 shadow-md backdrop-blur-sm transition-transform active:scale-90 disabled:cursor-not-allowed disabled:opacity-60",
-            isWishlisted && "bg-white",
+            "absolute right-3.5 top-3.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 shadow-md backdrop-blur-sm transition-transform active:scale-90 disabled:cursor-not-allowed disabled:opacity-60",
+            isWishlisted && "bg-background",
           )}
         >
           {isCheckingWishlist || isTogglingWishlist ? (
-            <Loader2 className="h-4 w-4 animate-spin text-slate-700" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
             <Heart
               className={cn(
                 "h-4 w-4 transition-colors",
-                isWishlisted ? "fill-red-500 text-red-500" : "text-slate-700",
+                isWishlisted ? "fill-red-500 text-red-500" : "text-foreground",
               )}
             />
           )}
@@ -182,7 +182,7 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-white/60">
+            <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
               No Image
             </div>
           )}
@@ -192,25 +192,25 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
       {/* Card Body */}
       <CardContent className="flex flex-col gap-2 p-4 pb-2">
         <Link href={`/products/${product.slug}`}>
-          <h3 className="text-xl font-bold tracking-tight text-slate-900 line-clamp-1 hover:text-primary transition-colors">
+          <h3 className="text-xl font-bold tracking-tight text-foreground line-clamp-1 hover:text-primary transition-colors">
             {product.name}
           </h3>
         </Link>
 
-        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
           {product.description ||
             "Lightweight, durable, and built for peak performance every step of the way."}
         </p>
         {rating && rating.count > 0 && (
           <div className="flex items-center gap-1.5">
             <RatingStars value={rating.average} readOnly size="sm" />
-            <span className="text-xs text-slate-500">({rating.count})</span>
+            <span className="text-xs text-muted-foreground">({rating.count})</span>
           </div>
         )}
 
         {/* Price & Action Footer */}
         <div className="mt-3 flex items-center justify-between">
-          <span className="text-lg font-bold text-slate-900">
+          <span className="text-lg font-bold text-foreground">
             ${lowestPrice.toFixed(2)}
           </span>
 
@@ -218,7 +218,7 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
             size="default"
             disabled={isOutOfStock || isAddingToCart}
             onClick={handleAddToCart}
-            className="rounded-full bg-[#18181B] px-5 py-2.5 text-xs font-semibold text-white shadow-none hover:bg-black active:scale-95 transition-all"
+            className="rounded-full px-5 py-2.5 text-xs font-semibold shadow-none active:scale-95 transition-all"
           >
             {isAddingToCart ? (
               <Loader2 className="h-4 w-4 animate-spin" />

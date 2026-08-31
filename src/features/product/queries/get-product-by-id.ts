@@ -1,76 +1,27 @@
+// src/features/product/queries/get-product-by-id.ts
+import "server-only";
 import { dbConnect } from "@/lib/db/dbConnect";
 import { Product } from "@/models/Product";
 import "@/models/Category";
 import "@/models/Brand";
+import type { IProduct } from "../types";
 
-export interface GetProductsParams {
-  page?: number;
-  limit?: number;
-  search?: string;
-  categoryId?: string;
-  brandId?: string;
-  status?: string;
-  isFeatured?: boolean;
-}
+/**
+ * Single-product lookup by id, populated with category/brand for admin
+ * edit forms. Intentionally NOT cached with unstable_cache — this is used
+ * on the admin edit page where the person expects to see the latest write
+ * immediately after a save, and admin edit traffic is low-volume enough
+ * that caching isn't worth the staleness risk (unlike get-product-by-slug,
+ * which is the public storefront read path).
+ */
+export async function getProductById(id: string): Promise<IProduct | null> {
+  await dbConnect();
 
-export async function getProducts({
-  page = 1,
-  limit = 10,
-  search = "",
-  categoryId,
-  brandId,
-  status,
-  isFeatured,
-}: GetProductsParams = {}) {
-  try {
-    await dbConnect();
+  const product = await Product.findById(id)
+    .populate("categoryId", "name slug")
+    .populate("brandId", "name slug")
+    .lean();
 
-    const query: Record<string, unknown> = {};
-
-    if (search.trim()) {
-      query.$or = [
-        { name: { $regex: search.trim(), $options: "i" } },
-        { "variants.sku": { $regex: search.trim(), $options: "i" } },
-      ];
-    }
-
-    if (categoryId) query.categoryId = categoryId;
-    if (brandId) query.brandId = brandId;
-    if (status) query.status = status;
-    if (isFeatured !== undefined) query.isFeatured = isFeatured;
-
-    const skip = (page - 1) * limit;
-
-    const [products, total] = await Promise.all([
-      Product.find(query)
-        .populate("categoryId", "name slug")
-        .populate("brandId", "name slug")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Product.countDocuments(query),
-    ]);
-
-    return {
-      products: JSON.parse(JSON.stringify(products)),
-      pagination: {
-        total,
-        pages: Math.ceil(total / limit) || 1,
-        page,
-        limit,
-      },
-    };
-  } catch (error) {
-    console.error("Failed to fetch products:", error);
-    return {
-      products: [],
-      pagination: {
-        total: 0,
-        pages: 1,
-        page,
-        limit,
-      },
-    };
-  }
+  if (!product) return null;
+  return JSON.parse(JSON.stringify(product));
 }
