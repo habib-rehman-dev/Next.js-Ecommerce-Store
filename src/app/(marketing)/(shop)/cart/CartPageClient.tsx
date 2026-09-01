@@ -1,7 +1,7 @@
 // src/app/(marketing)/cart/CartPageClient.tsx
 "use client";
 
-import {  useTransition } from "react";
+import { useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
+  c,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,7 +51,7 @@ export function CartPageClient({ initialCart }: Props) {
   const handleQuantityChange = (
     productId: string,
     variantId: string,
-    quantity: number
+    quantity: number,
   ) => {
     if (quantity < 1) return;
     startTransition(async () => {
@@ -90,11 +91,13 @@ export function CartPageClient({ initialCart }: Props) {
           <p className="text-muted-foreground mt-2">
             Looks like you haven&apos;t added anything to your cart yet.
           </p>
-          <Button className="mt-6" >
-            <Link href="/products">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Continue Shopping
-            </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/products" />}
+          >
+            Continue Shopping
           </Button>
         </div>
       </div>
@@ -123,7 +126,10 @@ export function CartPageClient({ initialCart }: Props) {
             const isOutOfStock = item.stock === 0;
 
             return (
-              <Card key={`${item.productId}-${item.variantId}`} className="overflow-hidden">
+              <Card
+                key={`${item.productId}-${item.variantId}`}
+                className="overflow-hidden"
+              >
                 <CardContent className="p-4 sm:p-6">
                   <div className="flex flex-col sm:flex-row gap-4">
                     {/* Product Image */}
@@ -153,14 +159,22 @@ export function CartPageClient({ initialCart }: Props) {
                       >
                         {item.productName}
                       </Link>
-                      <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
+                      <p className="text-sm text-muted-foreground">
+                        SKU: {item.sku}
+                      </p>
                       {Object.keys(item.attributes).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {Object.entries(item.attributes).map(([key, value]) => (
-                            <Badge key={key} variant="outline" className="text-xs">
-                              {key}: {value}
-                            </Badge>
-                          ))}
+                          {Object.entries(item.attributes).map(
+                            ([key, value]) => (
+                              <Badge
+                                key={key}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {key}: {value}
+                              </Badge>
+                            ),
+                          )}
                         </div>
                       )}
                       {isOutOfStock && (
@@ -184,7 +198,7 @@ export function CartPageClient({ initialCart }: Props) {
                             handleQuantityChange(
                               item.productId,
                               item.variantId,
-                              item.quantity - 1
+                              item.quantity - 1,
                             )
                           }
                         >
@@ -201,7 +215,7 @@ export function CartPageClient({ initialCart }: Props) {
                             handleQuantityChange(
                               item.productId,
                               item.variantId,
-                              item.quantity + 1
+                              item.quantity + 1,
                             )
                           }
                         >
@@ -256,7 +270,11 @@ export function CartPageClient({ initialCart }: Props) {
                 className="w-full"
                 size="lg"
                 onClick={handleCheckout}
-                disabled={isPending || contextPending || items.some((i) => i.stock === 0)}
+                disabled={
+                  isPending ||
+                  contextPending ||
+                  items.some((i) => i.stock === 0)
+                }
               >
                 {isPending || contextPending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -265,7 +283,7 @@ export function CartPageClient({ initialCart }: Props) {
                 )}
                 Proceed to Checkout
               </Button>
-              <Button variant="outline" className="w-full" >
+              <Button variant="outline" className="w-full">
                 <Link href="/products">Continue Shopping</Link>
               </Button>
             </CardContent>

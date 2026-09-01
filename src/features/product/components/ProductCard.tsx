@@ -13,11 +13,14 @@ import { RatingStars } from "@/features/review/components/RatingStars";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import type { IProduct } from "../types";
 import { useCart } from "@/features/cart/context/CartProvider";
 import { addToCart } from "@/features/cart/actions/add-to-cart";
-import { isProductWishlisted, toggleWishlist } from "@/features/wishlist/actions/wishlist-actions";
+import {
+  isProductWishlisted,
+  toggleWishlist,
+} from "@/features/wishlist/actions/wishlist-actions";
 
 type ProductCardProps = {
   product: IProduct;
@@ -133,12 +136,12 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
   return (
     <Card
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-[36px] border border-border/40 bg-card p-3.5 shadow-sm transition-all duration-300 hover:shadow-md",
+        "group relative flex flex-col justify-between p-0 overflow-hidden rounded-[36px] border border-border/40 bg-card  shadow-sm transition-all duration-300 hover:shadow-md",
         className,
       )}
     >
       {/* Top Image Container */}
-      <div className="relative aspect-4/3 w-full overflow-hidden rounded-[28px] bg-muted">
+      <div className="relative  aspect-4/3 w-full overflow-hidden rounded-[28px] bg-muted">
         {/* Trending Badge */}
         <div className="absolute left-3.5 top-3.5 z-10">
           <Badge className="rounded-full bg-emerald-600 px-3.5 py-1 text-xs font-semibold text-white hover:bg-emerald-600 border-none shadow-none">
@@ -178,7 +181,7 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
               src={primaryImage}
               alt={product.name}
               fill
-              className="object-contain w-full transition-transform duration-500 group-hover:scale-105"
+              className="object-contain h-full  w-full transition-transform duration-500 group-hover:scale-105"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           ) : (
@@ -204,12 +207,16 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
         {rating && rating.count > 0 && (
           <div className="flex items-center gap-1.5">
             <RatingStars value={rating.average} readOnly size="sm" />
-            <span className="text-xs text-muted-foreground">({rating.count})</span>
+            <span className="text-xs text-muted-foreground">
+              ({rating.count})
+            </span>
           </div>
         )}
 
         {/* Price & Action Footer */}
-        <div className="mt-3 flex items-center justify-between">
+      </CardContent>
+      <CardFooter className="">
+        <div className=" flex justify-between items-center  w-full">
           <span className="text-lg font-bold text-foreground">
             ${lowestPrice.toFixed(2)}
           </span>
@@ -229,7 +236,7 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
             )}
           </Button>
         </div>
-      </CardContent>
+      </CardFooter>
     </Card>
   );
 }
