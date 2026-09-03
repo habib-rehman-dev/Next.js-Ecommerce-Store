@@ -38,7 +38,20 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
   const { refreshCart } = useCart();
 
   const primaryImage = product.images?.[0];
-  const lowestPrice = Math.min(...product.variants.map((v) => v.price));
+
+  // Single source of truth: the variant we display the price for is the
+  // SAME variant we add to the cart. Picks the variant with the lowest
+  // effective (discount-aware) price.
+  const bestVariant = product.variants.reduce((best, v) => {
+    const bestEffective = best.discountPrice ?? best.price;
+    const vEffective = v.discountPrice ?? v.price;
+    return vEffective < bestEffective ? v : best;
+  }, product.variants[0]);
+
+  const effectivePrice = bestVariant.discountPrice ?? bestVariant.price;
+  const hasDiscount =
+    bestVariant.discountPrice != null && bestVariant.discountPrice < bestVariant.price;
+
   const totalStock = product.variants.reduce((acc, v) => acc + v.stock, 0);
   const isOutOfStock = totalStock === 0;
 
@@ -105,8 +118,7 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
       return;
     }
 
-    const firstVariant = product.variants[0];
-    if (!firstVariant) {
+    if (!bestVariant?._id) {
       toast.error("No variant available");
       return;
     }
@@ -116,7 +128,7 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
     try {
       const result = await addToCart({
         productId: product._id,
-        variantId: firstVariant._id || "",
+        variantId: bestVariant._id,
         quantity: 1,
       });
 
@@ -136,12 +148,12 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
   return (
     <Card
       className={cn(
-        "group relative flex flex-col justify-between p-0 overflow-hidden rounded-[36px] border border-border/40 bg-card  shadow-sm transition-all duration-300 hover:shadow-md",
+        "group relative flex flex-col justify-between p-0 overflow-hidden rounded-[36px] border border-border/40 bg-card shadow-sm transition-all duration-300 hover:shadow-md",
         className,
       )}
     >
       {/* Top Image Container */}
-      <div className="relative  aspect-4/3 w-full overflow-hidden rounded-[28px] bg-muted">
+      <div className="relative aspect-4/3 w-full overflow-hidden rounded-[28px] bg-muted">
         {/* Trending Badge */}
         <div className="absolute left-3.5 top-3.5 z-10">
           <Badge className="rounded-full bg-emerald-600 px-3.5 py-1 text-xs font-semibold text-white hover:bg-emerald-600 border-none shadow-none">
@@ -172,16 +184,13 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
         </button>
 
         {/* Image Link */}
-        <Link
-          href={`/products/${product.slug}`}
-          className="block h-full w-full"
-        >
+        <Link href={`/products/${product.slug}`} className="block h-full w-full">
           {primaryImage ? (
             <Image
               src={primaryImage}
               alt={product.name}
               fill
-              className="object-contain h-full  w-full transition-transform duration-500 group-hover:scale-105"
+              className="object-contain h-full w-full transition-transform duration-500 group-hover:scale-105"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           ) : (
@@ -204,22 +213,28 @@ export function ProductCard({ product, rating, className }: ProductCardProps) {
           {product.description ||
             "Lightweight, durable, and built for peak performance every step of the way."}
         </p>
+
         {rating && rating.count > 0 && (
           <div className="flex items-center gap-1.5">
             <RatingStars value={rating.average} readOnly size="sm" />
-            <span className="text-xs text-muted-foreground">
-              ({rating.count})
-            </span>
+            <span className="text-xs text-muted-foreground">({rating.count})</span>
           </div>
         )}
-
-        {/* Price & Action Footer */}
       </CardContent>
-      <CardFooter className="">
-        <div className=" flex justify-between items-center  w-full">
-          <span className="text-lg font-bold text-foreground">
-            ${lowestPrice.toFixed(2)}
-          </span>
+
+      {/* Price & Action Footer */}
+      <CardFooter>
+        <div className="flex justify-between items-center w-full">
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold text-foreground">
+              ${effectivePrice.toFixed(2)}
+            </span>
+            {hasDiscount && (
+              <span className="text-sm text-muted-foreground line-through">
+                ${bestVariant.price.toFixed(2)}
+              </span>
+            )}
+          </div>
 
           <Button
             size="default"

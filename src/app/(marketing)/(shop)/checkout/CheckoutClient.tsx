@@ -110,11 +110,6 @@ function CheckoutForm({ cart, addresses }: Props) {
   const discount = appliedCoupon?.discountAmount ?? 0;
   const total = Math.max(subtotal + shipping - discount, 0);
 
-  // // Reset card error when user types
-  // useEffect(() => {
-  //   if (paymentError) setPaymentError(null);
-  // }, [paymentError]);
-
   function handleApplyCoupon() {
     if (!couponInput.trim()) return;
     setCouponError(null);
@@ -157,9 +152,6 @@ function CheckoutForm({ cart, addresses }: Props) {
     setPaymentError(null);
 
     try {
-      // 1. Create the pending Order + PaymentIntent together. The discount
-      // is recomputed and re-validated server-side here — appliedCoupon is
-      // only used for the on-screen preview, never trusted for the charge.
       const paymentIntentResult = await createPaymentIntent({
         shippingAddressId: selectedAddressId,
         couponCode: appliedCoupon?.code,
@@ -174,7 +166,6 @@ function CheckoutForm({ cart, addresses }: Props) {
 
       const { clientSecret, orderId } = paymentIntentResult.data!;
 
-      // 2. Confirm payment with Stripe
       const cardElement = elements.getElement(CardElement);
       if (!cardElement) {
         toast.error("Payment form not ready");
@@ -208,9 +199,6 @@ function CheckoutForm({ cart, addresses }: Props) {
       }
 
       if (paymentIntent?.status === "succeeded") {
-        // The Order already exists (created in step 1) and the Stripe
-        // webhook finalizes it (marks it paid, decrements stock, redeems
-        // the coupon, clears the cart) — we just redirect here.
         toast.success("Order placed successfully! 🎉");
         router.push(`/order/confirmation/${orderId}`);
       }
@@ -256,10 +244,105 @@ function CheckoutForm({ cart, addresses }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Left Column: Address + Payment */}
-      <div className="lg:col-span-2 space-y-6">
-        {/* Address Selection */}
+    <div className="space-y-6">
+      {/* 🆕 TOP ROW: Product Info (Left) + Payment/Card (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Top: Product Info / Order Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <span>🛍️</span> Your Items
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="max-h-48">
+              <div className="space-y-3">
+                {cart.items.map((item) => (
+                  <div key={`${item.productId}-${item.variantId}`} className="flex gap-3">
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-muted">
+                      {item.productImage && (
+                        <Image
+                          src={item.productImage}
+                          alt={item.productName}
+                          fill
+                          className="object-cover"
+                        />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.productName}</p>
+                      <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                    </div>
+                    <p className="text-sm font-semibold">
+                      {formatPrice((item.discountPrice || item.price) * item.quantity)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+
+            <Separator className="my-4" />
+
+            <div className="flex justify-between font-semibold">
+              <span>Subtotal</span>
+              <span>{formatPrice(subtotal)}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Right Top: Payment Method / Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CreditCard className="h-5 w-5 text-primary" />
+              Payment Method
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Test Card Info */}
+              <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
+                <p className="text-xs font-medium text-muted-foreground mb-1">
+                  💳 Test Card (Development)
+                </p>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span className="bg-muted px-2 py-0.5 rounded">4242 4242 4242 4242</span>
+                  <span className="bg-muted px-2 py-0.5 rounded">12/34</span>
+                  <span className="bg-muted px-2 py-0.5 rounded">123</span>
+                </div>
+              </div>
+
+              {/* Card Element */}
+              <div className="p-4 border rounded-lg bg-background transition-all focus-within:ring-2 focus-within:ring-primary/50">
+                <CardElement
+                  options={CARD_ELEMENT_OPTIONS}
+                  onChange={(event) => {
+                    setCardComplete(event.complete);
+                    if (event.error) {
+                      setPaymentError(event.error.message);
+                    } else {
+                      setPaymentError(null);
+                    }
+                  }}
+                />
+              </div>
+
+              {paymentError && (
+                <p className="text-sm text-destructive">{paymentError}</p>
+              )}
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Lock className="h-3 w-3" />
+                <span>Your payment information is secure and encrypted.</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 🆕 BOTTOM ROW: Address + Coupon + Complete Order */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Bottom: Address */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -436,93 +519,12 @@ function CheckoutForm({ cart, addresses }: Props) {
           </CardContent>
         </Card>
 
-        {/* Payment Section */}
+        {/* Right Bottom: Coupon + Complete Order */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <CreditCard className="h-5 w-5 text-primary" />
-              Payment Method
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Test Card Info - Helpful for development */}
-              <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
-                <p className="text-xs font-medium text-muted-foreground mb-1">
-                  💳 Test Card (Development)
-                </p>
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span className="bg-muted px-2 py-0.5 rounded">4242 4242 4242 4242</span>
-                  <span className="bg-muted px-2 py-0.5 rounded">12/34</span>
-                  <span className="bg-muted px-2 py-0.5 rounded">123</span>
-                </div>
-              </div>
-
-              {/* Card Element */}
-              <div className="p-4 border rounded-lg bg-background transition-all focus-within:ring-2 focus-within:ring-primary/50">
-                <CardElement
-                  options={CARD_ELEMENT_OPTIONS}
-                  onChange={(event) => {
-                    setCardComplete(event.complete);
-                    if (event.error) {
-                      setPaymentError(event.error.message);
-                    } else {
-                      setPaymentError(null);
-                    }
-                  }}
-                />
-              </div>
-
-              {/* Payment Error */}
-              {paymentError && (
-                <p className="text-sm text-destructive">{paymentError}</p>
-              )}
-
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Lock className="h-3 w-3" />
-                <span>Your payment information is secure and encrypted.</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Right Column: Order Summary */}
-      <div className="lg:col-span-1">
-        <Card className="sticky top-24">
           <CardHeader>
             <CardTitle className="text-lg">Order Summary</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Items Preview */}
-            <ScrollArea className="max-h-48">
-              <div className="space-y-3">
-                {cart.items.map((item) => (
-                  <div key={`${item.productId}-${item.variantId}`} className="flex gap-3">
-                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-muted">
-                      {item.productImage && (
-                        <Image
-                          src={item.productImage}
-                          alt={item.productName}
-                          fill
-                          className="object-cover"
-                        />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.productName}</p>
-                      <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
-                    </div>
-                    <p className="text-sm font-semibold">
-                      {formatPrice((item.discountPrice || item.price) * item.quantity)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-
-            <Separator />
-
             {/* Coupon Input */}
             {appliedCoupon ? (
               <div className="flex items-center justify-between rounded-lg border bg-green-500/5 px-3 py-2">

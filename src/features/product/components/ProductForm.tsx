@@ -343,6 +343,17 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
       }
     });
   }
+  // Pick the variant with the best (lowest) effective price, considering discount
+  // const bestVariant = product.variants.reduce((best, v) => {
+  //   const bestEffective = best.discountPrice ?? best.price;
+  //   const vEffective = v.discountPrice ?? v.price;
+  //   return vEffective < bestEffective ? v : best;
+  // }, product.variants[0]);
+
+  // const effectivePrice = bestVariant.discountPrice ?? bestVariant.price;
+  // const hasDiscount =
+  //   bestVariant.discountPrice != null &&
+  //   bestVariant.discountPrice < bestVariant.price;
 
   return (
     <Card className="max-w-5xl mx-auto">
@@ -662,21 +673,33 @@ export function ProductForm({ mode, product, categories, brands }: Props) {
                     </div>
 
                     <div>
-                      <Label className="text-xs">Discount Price ($)</Label>
+                      <Label className="text-xs">
+                        Sale Price ($){" "}
+                        <span className="text-muted-foreground">
+                          — final price, must be lower than regular price
+                        </span>
+                      </Label>
                       <Input
                         type="number"
                         min={0}
                         step="0.01"
                         value={variant.discountPrice || ""}
-                        onChange={(e) =>
-                          updateVariantField(
-                            vIdx,
-                            "discountPrice",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Optional"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateVariantField(vIdx, "discountPrice", val);
+                        }}
+                        placeholder="Leave blank if no sale"
                       />
+                      {variant.discountPrice !== undefined &&
+                        variant.discountPrice !== null &&
+                        Number(variant.discountPrice) > 0 &&
+                        Number(variant.discountPrice) >=
+                          Number(variant.price) && (
+                          <p className="text-xs text-destructive mt-1">
+                            Sale price must be lower than the regular price ($
+                            {variant.price || 0})
+                          </p>
+                        )}
                     </div>
 
                     <div>
