@@ -13,7 +13,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
-  c,
+  
 } from "lucide-react";
 import { toast } from "sonner";
 
